@@ -1,0 +1,76 @@
+// Copyright 2025 TIER IV, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef AUTOWARE__DISSUSION_PLANNER_HPP_
+#define AUTOWARE__DISSUSION_PLANNER_HPP_
+
+#include "autoware_utils/ros/polling_subscriber.hpp"
+#include "autoware_utils/system/time_keeper.hpp"
+#include "rclcpp/rclcpp.hpp"
+
+#include <autoware_utils/ros/update_param.hpp>
+#include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
+#include <rclcpp/subscription.hpp>
+#include <rclcpp/timer.hpp>
+
+#include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
+#include "nav_msgs/msg/odometry.hpp"
+#include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
+#include <autoware_perception_msgs/msg/detail/tracked_objects__struct.hpp>
+#include <autoware_perception_msgs/msg/tracked_objects.hpp>
+#include <autoware_perception_msgs/msg/traffic_signal.hpp>
+#include <autoware_planning_msgs/msg/lanelet_route.hpp>
+#include <autoware_planning_msgs/msg/trajectory.hpp>
+
+#include <memory>
+
+namespace autoware::diffusion_planner
+{
+using autoware_map_msgs::msg::LaneletMapBin;
+using autoware_perception_msgs::msg::TrackedObjects;
+using autoware_perception_msgs::msg::TrafficSignal;
+using autoware_planning_msgs::msg::LaneletRoute;
+using autoware_planning_msgs::msg::Trajectory;
+using geometry_msgs::msg::AccelWithCovarianceStamped;
+using nav_msgs::msg::Odometry;
+
+class DiffusionPlanner : public rclcpp::Node
+{
+public:
+  explicit DiffusionPlanner(const rclcpp::NodeOptions & options);
+  void on_timer();
+  void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
+
+  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
+    debug_processing_time_detail_pub_;
+  rclcpp::Publisher<Trajectory>::SharedPtr pub_trajectory_{nullptr};
+  mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
+  autoware_utils::InterProcessPollingSubscriber<Odometry> sub_current_odometry_{
+    this, "~/input/odometry"};
+  autoware_utils::InterProcessPollingSubscriber<AccelWithCovarianceStamped>
+    sub_current_acceleration_{this, "~/input/acceleration"};
+  autoware_utils::InterProcessPollingSubscriber<TrackedObjects> sub_predicted_objects_{
+    this, "~/input/tracked_objects"};
+  autoware_utils::InterProcessPollingSubscriber<TrafficSignal> sub_traffic_signal_{
+    this, "~/input/traffic_signals"};
+  autoware_utils::InterProcessPollingSubscriber<
+    LaneletRoute, autoware_utils::polling_policy::Newest>
+    route_subscriber_{this, "~/input/route", rclcpp::QoS{1}.transient_local()};
+  autoware_utils::InterProcessPollingSubscriber<
+    LaneletMapBin, autoware_utils::polling_policy::Newest>
+    vector_map_subscriber_{this, "~/input/vector_map", rclcpp::QoS{1}.transient_local()};
+};
+}  // namespace autoware::diffusion_planner
+#endif  // AUTOWARE__DISSUSION_PLANNER_HPP_
