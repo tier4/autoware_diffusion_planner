@@ -33,6 +33,8 @@
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
 
+#include <onnxruntime_cxx_api.h>
+
 #include <memory>
 
 namespace autoware::diffusion_planner
@@ -45,13 +47,34 @@ using autoware_planning_msgs::msg::Trajectory;
 using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 
+struct DiffusionPlannerParams
+{
+  std::string model_path;
+  double planning_frequency_hz;
+};
+struct DiffusionPlannerDebugParams
+{
+  bool enable_debug;
+  bool enable_processing_time_detail;
+};
+
 class DiffusionPlanner : public rclcpp::Node
 {
 public:
   explicit DiffusionPlanner(const rclcpp::NodeOptions & options);
+  void set_up_params();
   void on_timer();
   void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
+  void load_model(const std::string & model_path);
 
+  // onnxruntime
+  Ort::Session session_;
+
+  // Node parameters
+  DiffusionPlannerParams params_;
+  DiffusionPlannerDebugParams debug_params_;
+
+  // Node elements
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
