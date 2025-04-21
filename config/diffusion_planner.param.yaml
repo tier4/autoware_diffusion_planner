@@ -1,4 +1,4 @@
 /**:
   ros__parameters:
     onnx_model_path: ""
-    planning_frequency_hz: 10.0
+    planning_frequency_hz: 1.0
