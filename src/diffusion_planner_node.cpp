@@ -55,8 +55,6 @@ void DiffusionPlanner::set_up_params()
 
 void DiffusionPlanner::load_model(const std::string & model_path)
 {
-  // Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "DiffusionPlanner");
-  // Ort::Env env(ORT_LOGGING_LEVEL_VERBOSE, "DiffusionPlanner");
   env_ = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "DiffusionPlanner");
   session_options_.SetLogSeverityLevel(1);
   session_options_.AppendExecutionProvider_CUDA(cuda_options_);
@@ -69,8 +67,9 @@ void DiffusionPlanner::load_model(const std::string & model_path)
 void DiffusionPlanner::on_timer()
 {
   // Timer callback function
-  RCLCPP_INFO(get_logger(), "Diffusion Planner Timer Callback");
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+  // Ort::MemoryInfo cuda_mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
 
   Ort::Allocator cuda_allocator(session_, mem_info);
 
@@ -131,38 +130,19 @@ void DiffusionPlanner::on_timer()
     "lanes_speed_limit", "lanes_has_speed_limit", "route_lanes"};
 
   const char * output_names[] = {"output"};
-
-  for (size_t i = 0; i < 7; ++i) {
-    std::cout << "Input " << i << " name: " << input_names[i] << std::endl;
-    std::cout << "IsTensor: " << input_tensors[i].IsTensor() << std::endl;
-    std::cout << "Tensor type: " << input_tensors[i].GetTensorTypeAndShapeInfo().GetElementType()
-              << std::endl;
-    std::cout << "Tensor shape: ";
-    for (auto dim : input_tensors[i].GetTensorTypeAndShapeInfo().GetShape()) {
-      std::cout << dim << " ";
-    }
-    std::cout << std::endl;
-  }
   // run inference
   std::cerr << "Running inference..." << std::endl;
   try {
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
     std::cout << "Inference ran successfully, got " << output.size() << " outputs." << std::endl;
+    auto data = output[0].GetTensorMutableData<float>();
+    std::cout << "Output data: ";
+    for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
+      std::cout << data[i] << " ";
+    }
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
-  }
-
-  for (size_t i = 0; i < 7; ++i) {
-    std::cout << "Input " << i << " name: " << input_names[i] << std::endl;
-    std::cout << "IsTensor: " << input_tensors[i].IsTensor() << std::endl;
-    std::cout << "Tensor type: " << input_tensors[i].GetTensorTypeAndShapeInfo().GetElementType()
-              << std::endl;
-    std::cout << "Tensor shape: ";
-    for (auto dim : input_tensors[i].GetTensorTypeAndShapeInfo().GetShape()) {
-      std::cout << dim << " ";
-    }
-    std::cout << std::endl;
   }
 }
 
