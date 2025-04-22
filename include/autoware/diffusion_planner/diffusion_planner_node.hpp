@@ -103,6 +103,9 @@ public:
   void load_model(const std::string & model_path);
 
   // onnxruntime
+  OrtCUDAProviderOptions cuda_options_;
+  Ort::Env env_;
+  Ort::SessionOptions session_options_;
   Ort::Session session_;
   Ort::AllocatorWithDefaultOptions allocator_;
 
