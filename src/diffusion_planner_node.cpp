@@ -59,7 +59,7 @@ void DiffusionPlanner::load_model(const std::string & model_path)
   // Ort::Env env(ORT_LOGGING_LEVEL_VERBOSE, "DiffusionPlanner");
   env_ = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "DiffusionPlanner");
   session_options_.SetLogSeverityLevel(1);
-  // session_options_.AppendExecutionProvider_CUDA(cuda_options_);
+  session_options_.AppendExecutionProvider_CUDA(cuda_options_);
   session_options_.SetIntraOpNumThreads(1);
   session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
   session_ = Ort::Session(env_, model_path.c_str(), session_options_);
@@ -70,18 +70,17 @@ void DiffusionPlanner::on_timer()
 {
   // Timer callback function
   RCLCPP_INFO(get_logger(), "Diffusion Planner Timer Callback");
-  // Ort::AllocatorWithDefaultOptions allocator;
+  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
-  // Ort::MemoryInfo mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
-  Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
+  Ort::Allocator cuda_allocator(session_, mem_info);
 
-  std::vector<int64_t> ego_current_state_shape = {1, 10};
-  std::vector<int64_t> neighbor_agents_past_shape = {1, 32, 21, 11};
-  std::vector<int64_t> lane_has_speed_limit_shape = {1, 70, 1};
-  std::vector<int64_t> static_objects_shape = {1, 5, 10};
-  std::vector<int64_t> lanes_shape = {1, 70, 20, 12};
-  std::vector<int64_t> lanes_speed_limit_shape = {1, 70, 1};
-  std::vector<int64_t> route_lanes_shape = {1, 25, 20, 12};
+  const std::vector<int64_t> ego_current_state_shape = {1, 10};
+  const std::vector<int64_t> neighbor_agents_past_shape = {1, 32, 21, 11};
+  const std::vector<int64_t> lane_has_speed_limit_shape = {1, 70, 1};
+  const std::vector<int64_t> static_objects_shape = {1, 5, 10};
+  const std::vector<int64_t> lanes_shape = {1, 70, 20, 12};
+  const std::vector<int64_t> lanes_speed_limit_shape = {1, 70, 1};
+  const std::vector<int64_t> route_lanes_shape = {1, 25, 20, 12};
 
   auto ego_current_state = create_float_data(ego_current_state_shape);
   auto neighbor_agents_past = create_float_data(neighbor_agents_past_shape);
