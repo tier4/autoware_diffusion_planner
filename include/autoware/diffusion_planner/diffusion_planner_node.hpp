@@ -33,6 +33,8 @@
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
 
+#include <onnxruntime_cxx_api.h>
+
 #include <memory>
 
 namespace autoware::diffusion_planner
@@ -45,13 +47,73 @@ using autoware_planning_msgs::msg::Trajectory;
 using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 
+struct DiffusionPlannerParams
+{
+  std::string model_path;
+  double planning_frequency_hz;
+};
+struct DiffusionPlannerDebugParams
+{
+  bool enable_debug;
+  bool enable_processing_time_detail;
+};
+
+std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 0.1f)
+{
+  size_t total_size = 1;
+  for (auto dim : shape) total_size *= dim;
+  std::vector<float> data(total_size, fill);
+  return data;
+}
+
+Ort::Value create_tensor_float(std::vector<float> & data, const std::vector<int64_t> & shape)
+{
+  Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
+  return Ort::Value::CreateTensor<float>(
+    mem_info, data.data(), data.size(), shape.data(), shape.size());
+}
+
+Ort::Value create_tensor_bool(
+  const std::vector<int64_t> & shape, std::shared_ptr<bool[]> plain_data, bool fill = true)
+{
+  size_t total_size = 1;
+  for (auto dim : shape) total_size *= dim;
+
+  // Use vector of bool to initialize
+  std::vector<bool> bool_data(total_size, fill);
+
+  // Convert to plain bool array (since vector<bool> is special and not usable directly)
+  auto it = bool_data.begin();
+  for (size_t i = 0; i < total_size; ++i) {
+    plain_data[i] = *(it++);
+  }
+
+  Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
+  return Ort::Value::CreateTensor<bool>(
+    mem_info, plain_data.get(), total_size, shape.data(), shape.size());
+}
+
 class DiffusionPlanner : public rclcpp::Node
 {
 public:
   explicit DiffusionPlanner(const rclcpp::NodeOptions & options);
+  void set_up_params();
   void on_timer();
   void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
+  void load_model(const std::string & model_path);
 
+  // onnxruntime
+  OrtCUDAProviderOptions cuda_options_;
+  Ort::Env env_;
+  Ort::SessionOptions session_options_;
+  Ort::Session session_;
+  Ort::AllocatorWithDefaultOptions allocator_;
+
+  // Node parameters
+  DiffusionPlannerParams params_;
+  DiffusionPlannerDebugParams debug_params_;
+
+  // Node elements
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
