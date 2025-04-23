@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <numeric>
 #include <vector>
 
 namespace autoware::diffusion_planner
@@ -69,7 +70,7 @@ void DiffusionPlanner::on_timer()
   // Timer callback function
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  // Ort::MemoryInfo cuda_mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
+  Ort::MemoryInfo cuda_mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
 
   Ort::Allocator cuda_allocator(session_, mem_info);
 
@@ -79,6 +80,7 @@ void DiffusionPlanner::on_timer()
   const std::vector<int64_t> static_objects_shape = {1, 5, 10};
   const std::vector<int64_t> lanes_shape = {1, 70, 20, 12};
   const std::vector<int64_t> lanes_speed_limit_shape = {1, 70, 1};
+  const std::vector<int64_t> lanes_has_speed_limit_shape = {1, 70, 1};
   const std::vector<int64_t> route_lanes_shape = {1, 25, 20, 12};
 
   auto ego_current_state = create_float_data(ego_current_state_shape);
@@ -103,8 +105,9 @@ void DiffusionPlanner::on_timer()
     mem_info, lanes_speed_limit.data(), lanes_speed_limit.size(), lanes_speed_limit_shape.data(),
     lanes_speed_limit_shape.size());
 
-  size_t total_size = 70;
-  std::vector<int64_t> shape = {1, 70, 1};
+  size_t total_size = std::accumulate(
+    lane_has_speed_limit_shape.begin(), lane_has_speed_limit_shape.end(), 1,
+    std::multiplies<int64_t>());
   std::vector<std::shared_ptr<void>> keep_alive_blobs_;
   // Allocate raw memory for bool array
   auto raw_bool_array = std::shared_ptr<bool>(new bool[total_size], std::default_delete<bool[]>());
@@ -112,7 +115,8 @@ void DiffusionPlanner::on_timer()
   std::fill(raw_bool_array.get(), raw_bool_array.get() + total_size, true);
   // Create the tensor
   auto lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
-    mem_info, raw_bool_array.get(), total_size, shape.data(), shape.size());
+    mem_info, raw_bool_array.get(), total_size, lanes_has_speed_limit_shape.data(),
+    lanes_has_speed_limit_shape.size());
   // Ensure the tensor's data is kept alive
   keep_alive_blobs_.emplace_back(raw_bool_array);
   auto route_lanes_tensor = Ort::Value::CreateTensor<float>(
