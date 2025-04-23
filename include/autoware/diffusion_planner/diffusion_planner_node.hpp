@@ -66,33 +66,6 @@ std::vector<float> create_float_data(const std::vector<int64_t> & shape, float f
   return data;
 }
 
-Ort::Value create_tensor_float(std::vector<float> & data, const std::vector<int64_t> & shape)
-{
-  Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
-  return Ort::Value::CreateTensor<float>(
-    mem_info, data.data(), data.size(), shape.data(), shape.size());
-}
-
-Ort::Value create_tensor_bool(
-  const std::vector<int64_t> & shape, std::shared_ptr<bool[]> plain_data, bool fill = true)
-{
-  size_t total_size = 1;
-  for (auto dim : shape) total_size *= dim;
-
-  // Use vector of bool to initialize
-  std::vector<bool> bool_data(total_size, fill);
-
-  // Convert to plain bool array (since vector<bool> is special and not usable directly)
-  auto it = bool_data.begin();
-  for (size_t i = 0; i < total_size; ++i) {
-    plain_data[i] = *(it++);
-  }
-
-  Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
-  return Ort::Value::CreateTensor<bool>(
-    mem_info, plain_data.get(), total_size, shape.data(), shape.size());
-}
-
 class DiffusionPlanner : public rclcpp::Node
 {
 public:
