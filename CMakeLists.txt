@@ -4,11 +4,11 @@ project(autoware_diffusion_planner)
 find_package(autoware_cmake REQUIRED)
 autoware_package()
 
-option(ONNXRUNTIME_DIR "Path to ONNX Runtime install root" "$ENV{HOME}/onnxruntime-linux-x64-gpu-1.21.0")
+option(ONNXRUNTIME_DIR "Path to ONNX Runtime install root" "$ENV{HOME}/onnxruntime-linux-x64-gpu-1.20.1")
 set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_DIR}/include")
 set(ONNXRUNTIME_LIB "${ONNXRUNTIME_DIR}/lib/libonnxruntime.so")
 
-set(ONNXRUNTIME_ROOT "$ENV{HOME}/onnxruntime-linux-x64-gpu-1.21.0")
+set(ONNXRUNTIME_ROOT "$ENV{HOME}/onnxruntime-linux-x64-gpu-1.20.1")
 set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_ROOT}/include")
 set(ONNXRUNTIME_LIB "${ONNXRUNTIME_ROOT}/lib/libonnxruntime.so")
 

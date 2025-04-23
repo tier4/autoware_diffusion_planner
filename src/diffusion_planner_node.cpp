@@ -14,6 +14,7 @@
 
 #include "autoware/diffusion_planner/diffusion_planner_node.hpp"
 
+#include "autoware/diffusion_planner/utils/agent.hpp"
 #include "onnxruntime_cxx_api.h"
 
 #include <cstdint>
@@ -70,7 +71,7 @@ void DiffusionPlanner::on_timer()
   // Timer callback function
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::MemoryInfo cuda_mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
+  // Ort::MemoryInfo cuda_mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
 
   Ort::Allocator cuda_allocator(session_, mem_info);
 
@@ -140,11 +141,11 @@ void DiffusionPlanner::on_timer()
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
     std::cout << "Inference ran successfully, got " << output.size() << " outputs." << std::endl;
-    auto data = output[0].GetTensorMutableData<float>();
+    // auto data = output[0].GetTensorMutableData<float>();
     std::cout << "Output data: ";
-    for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
-      std::cout << data[i] << " ";
-    }
+    // for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
+    //   std::cout << data[i] << " ";
+    // }
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
   }

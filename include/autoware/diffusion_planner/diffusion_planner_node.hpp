@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE__DISSUSION_PLANNER_HPP_
-#define AUTOWARE__DISSUSION_PLANNER_HPP_
+#ifndef AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
+#define AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
 
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
@@ -108,4 +108,4 @@ public:
     vector_map_subscriber_{this, "~/input/vector_map", rclcpp::QoS{1}.transient_local()};
 };
 }  // namespace autoware::diffusion_planner
-#endif  // AUTOWARE__DISSUSION_PLANNER_HPP_
+#endif  // AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
