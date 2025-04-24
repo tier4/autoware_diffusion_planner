@@ -15,6 +15,7 @@
 #include "autoware/diffusion_planner/diffusion_planner_node.hpp"
 
 #include "autoware/diffusion_planner/utils/agent.hpp"
+#include "autoware/diffusion_planner/utils/ego.hpp"
 #include "onnxruntime_cxx_api.h"
 
 #include <cstdint>
@@ -73,10 +74,17 @@ void DiffusionPlanner::on_timer()
 
   auto objects = sub_tracked_objects_.take_data();
   auto ego_kinematic_state = sub_current_odometry_.take_data();
-  if (!objects || !ego_kinematic_state) {
+  auto ego_acceleration = sub_current_acceleration_.take_data();
+
+  if (!objects || !ego_kinematic_state || !ego_acceleration) {
     RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state data received");
     return;
   }
+
+  EgoState ego_state(
+    *ego_kinematic_state, *ego_acceleration, 5.0);  // TODO(Daniel): use vehicle_info_utils
+
+  std::cerr << ego_state.to_string() << "\n";
 
   if (!agent_data_) {
     agent_data_ =

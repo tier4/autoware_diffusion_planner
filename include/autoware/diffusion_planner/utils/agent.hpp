@@ -187,8 +187,7 @@ struct AgentState
   [[nodiscard]] std::string to_string() const
   {
     constexpr std::array<const char *, AGENT_STATE_DIM> field_names = {
-      "x",      "y",     "cos_yaw",       "sin_yaw",          "vx",           "vy",
-      "length", "width", "label_vehicle", "label_pedestrian", "label_bicycle"};
+      "x", "y", "cos_yaw", "sin_yaw", "vx", "vy", "L", "W", "v", "p", "b"};
     std::ostringstream oss;
     auto data = as_array();
     oss << "AgentState: [";
@@ -462,12 +461,7 @@ struct AgentData
         data_.push_back(v);
       }
     }
-    std::cerr << "AgentData::fill_data: data size: " << data_.size() << std::endl;
-    std::cerr << "max_num_agent_: " << max_num_agent_ << std::endl;
     if (pad_with_zeroes) {
-      // for (size_t i = data_.size(); i < max_num_agent_ * time_length_ * state_dim(); ++i) {
-      //   data_.push_back(0.0f);
-      // }
       data_.resize(max_num_agent_ * time_length_ * state_dim(), 0.0f);
     }
   }
