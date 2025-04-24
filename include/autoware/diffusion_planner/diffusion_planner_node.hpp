@@ -15,6 +15,7 @@
 #ifndef AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
 #define AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
 
+#include "autoware/diffusion_planner/utils/agent.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -36,9 +37,11 @@
 #include <onnxruntime_cxx_api.h>
 
 #include <memory>
+#include <optional>
 
 namespace autoware::diffusion_planner
 {
+using autoware::diffusion_planner::AgentData;
 using autoware_map_msgs::msg::LaneletMapBin;
 using autoware_perception_msgs::msg::TrackedObjects;
 using autoware_perception_msgs::msg::TrafficSignal;
@@ -82,6 +85,19 @@ public:
   Ort::Session session_;
   Ort::AllocatorWithDefaultOptions allocator_;
 
+  // Model input shapes
+  const std::vector<int64_t> ego_current_state_shape_ = {1, 10};
+  const std::vector<int64_t> neighbor_agents_past_shape_ = {1, 32, 21, 11};
+  const std::vector<int64_t> lane_has_speed_limit_shape_ = {1, 70, 1};
+  const std::vector<int64_t> static_objects_shape_ = {1, 5, 10};
+  const std::vector<int64_t> lanes_shape_ = {1, 70, 20, 12};
+  const std::vector<int64_t> lanes_speed_limit_shape_ = {1, 70, 1};
+  const std::vector<int64_t> lanes_has_speed_limit_shape_ = {1, 70, 1};
+  const std::vector<int64_t> route_lanes_shape_ = {1, 25, 20, 12};
+
+  // Model input data
+  std::optional<AgentData> agent_data_{std::nullopt};
+
   // Node parameters
   DiffusionPlannerParams params_;
   DiffusionPlannerDebugParams debug_params_;
@@ -96,7 +112,7 @@ public:
     this, "~/input/odometry"};
   autoware_utils::InterProcessPollingSubscriber<AccelWithCovarianceStamped>
     sub_current_acceleration_{this, "~/input/acceleration"};
-  autoware_utils::InterProcessPollingSubscriber<TrackedObjects> sub_predicted_objects_{
+  autoware_utils::InterProcessPollingSubscriber<TrackedObjects> sub_tracked_objects_{
     this, "~/input/tracked_objects"};
   autoware_utils::InterProcessPollingSubscriber<TrafficSignal> sub_traffic_signal_{
     this, "~/input/traffic_signals"};

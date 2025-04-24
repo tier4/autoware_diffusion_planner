@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <iostream>
 #include <iterator>
 
 namespace autoware::diffusion_planner
@@ -34,29 +35,42 @@ public:
   using const_iterator = typename std::deque<T>::const_iterator;
   using rconst_iterator = typename std::reverse_iterator<const_iterator>;
 
-  explicit FixedQueue(size_type size) : queue_(size) {}
+  explicit FixedQueue(size_type size) : max_size_(size) {}
 
   void push_back(const T && t) noexcept
   {
-    queue_.pop_front();
+    if (queue_.size() >= max_size_) {
+      std::cerr << "Queue is full, removing the oldest element." << std::endl;
+      queue_.pop_front();
+    }
+    std::cerr << "pushing back (0)" << std::endl;
+
     queue_.push_back(t);
   }
 
   void push_back(const T & t) noexcept
   {
-    queue_.pop_front();
+    if (queue_.size() >= max_size_) {
+      std::cerr << "Queue is full, removing the oldest element." << std::endl;
+      queue_.pop_front();
+    }
+    std::cerr << "pushing back (1)" << std::endl;
     queue_.push_back(t);
   }
 
   void push_front(const T && t) noexcept
   {
-    queue_.pop_back();
+    if (queue_.size() >= max_size_) {
+      queue_.pop_back();
+    }
     queue_.push_front(t);
   }
 
   void push_front(const T & t) noexcept
   {
-    queue_.pop_back();
+    if (queue_.size() >= max_size_) {
+      queue_.pop_back();
+    }
     queue_.push_front(t);
   }
 
@@ -82,6 +96,7 @@ public:
 
 private:
   std::deque<T> queue_;
+  size_t max_size_{0};
 };
 }  // namespace autoware::diffusion_planner
 #endif  // AUTOWARE__DIFFUSION_PLANNER__FIXED_QUEUE_HPP_
