@@ -20,7 +20,6 @@
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-#include <autoware_utils/ros/managed_transform_buffer.hpp>
 #include <autoware_utils/ros/update_param.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 #include <rclcpp/subscription.hpp>
