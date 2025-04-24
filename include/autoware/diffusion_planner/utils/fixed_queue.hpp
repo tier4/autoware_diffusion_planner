@@ -42,7 +42,6 @@ public:
     if (queue_.size() >= max_size_) {
       queue_.pop_front();
     }
-
     queue_.push_back(t);
   }
 

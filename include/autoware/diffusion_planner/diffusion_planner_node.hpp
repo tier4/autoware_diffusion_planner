@@ -20,6 +20,7 @@
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+#include <autoware_utils/ros/managed_transform_buffer.hpp>
 #include <autoware_utils/ros/update_param.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 #include <rclcpp/subscription.hpp>
@@ -49,6 +50,27 @@ using autoware_planning_msgs::msg::LaneletRoute;
 using autoware_planning_msgs::msg::Trajectory;
 using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
+
+geometry_msgs::msg::TransformStamped create_transform_from_odometry(
+  const nav_msgs::msg::Odometry & ego_kinematic_state)
+{
+  geometry_msgs::msg::TransformStamped transform_stamped;
+
+  // Set header info
+  transform_stamped.header.stamp = ego_kinematic_state.header.stamp;
+  transform_stamped.header.frame_id = "map";       // Parent frame
+  transform_stamped.child_frame_id = "base_link";  // Child frame
+
+  // Set translation (position)
+  transform_stamped.transform.translation.x = -ego_kinematic_state.pose.pose.position.x;
+  transform_stamped.transform.translation.y = -ego_kinematic_state.pose.pose.position.y;
+  transform_stamped.transform.translation.z = -ego_kinematic_state.pose.pose.position.z;
+
+  // Set rotation (orientation)
+  transform_stamped.transform.rotation = ego_kinematic_state.pose.pose.orientation;
+
+  return transform_stamped;
+}
 
 struct DiffusionPlannerParams
 {
@@ -122,6 +144,9 @@ public:
   autoware_utils::InterProcessPollingSubscriber<
     LaneletMapBin, autoware_utils::polling_policy::Newest>
     vector_map_subscriber_{this, "~/input/vector_map", rclcpp::QoS{1}.transient_local()};
+
+  tf2_ros::Buffer tf_buffer_{get_clock()};
+  tf2_ros::TransformListener tf_listener_{tf_buffer_};
 };
 }  // namespace autoware::diffusion_planner
 #endif  // AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_

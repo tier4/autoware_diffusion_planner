@@ -72,19 +72,48 @@ void DiffusionPlanner::on_timer()
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   auto objects = sub_tracked_objects_.take_data();
-  if (!objects) {
-    RCLCPP_WARN(get_logger(), "No tracked objects data received");
+  auto ego_kinematic_state = sub_current_odometry_.take_data();
+  if (!objects || !ego_kinematic_state) {
+    RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state data received");
     return;
   }
 
   if (!agent_data_) {
     agent_data_ = AgentData(*objects, neighbor_agents_past_shape_[2]);
   } else {
-    std::cerr << "Updating agent data..." << std::endl;
     agent_data_->update_histories(*objects);
   }
 
-  std::cerr << "Agent Data: " << agent_data_->to_string() << std::endl;
+  geometry_msgs::msg::TransformStamped transform_stamped =
+    create_transform_from_odometry(*ego_kinematic_state);
+  // transform_stamped.transform.translation.x = ego_kinematic_state->pose.pose.position.x;
+  // transform_stamped.transform.translation.y = ego_kinematic_state->pose.pose.position.y;
+  // transform_stamped.transform.translation.z = ego_kinematic_state->pose.pose.position.z;
+  // transform_stamped.transform.rotation = ego_kinematic_state->pose.pose.orientation;
+  // try {
+  //   transform_stamped = tf_buffer_.lookupTransform("base_link", objects->header.frame_id, now());
+  // } catch (tf2::TransformException & ex) {
+  //   RCLCPP_ERROR_STREAM(
+  //     get_logger(), "[DiffusionPlanner] Failed to look up transform from map to base_link");
+  //   return;
+  // }
+
+  std::cerr << "Transform DP translation: " << transform_stamped.transform.translation.x << ", "
+            << transform_stamped.transform.translation.y << ", "
+            << transform_stamped.transform.translation.z << std::endl;
+  std::cerr << "Transform DP rotation: " << transform_stamped.transform.rotation.x << ", "
+            << transform_stamped.transform.rotation.y << ", "
+            << transform_stamped.transform.rotation.z << ", "
+            << transform_stamped.transform.rotation.w << std::endl;
+  auto ego_centric_data = agent_data_.value();
+  ego_centric_data.apply_transform(transform_stamped);
+  // geometry_msgs::msg::Point position;
+  // position.x = 0.0;
+  // position.y = 0.0;
+  // position.z = 0.0;
+  // agent_data_->trim_to_k_closest_agents(position);
+
+  std::cerr << "Agent Data: " << ego_centric_data.to_string() << std::endl;
 
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 

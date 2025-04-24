@@ -399,8 +399,9 @@ struct AgentData
    * @param num_timestamps Number of timestamps.
    */
   AgentData(
-    const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t num_timestamps)
-  : time_length_(num_timestamps)
+    const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t num_timestamps,
+    const size_t max_num_agent = 32)
+  : max_num_agent_(max_num_agent), time_length_(num_timestamps)
   {
     std::vector<AgentHistory> histories;
     for (auto object : objects.objects) {
@@ -419,8 +420,10 @@ struct AgentData
    * @param num_agent Number of agents.
    * @param num_timestamps Number of timestamps.
    */
-  AgentData(const std::vector<AgentHistory> & histories, const size_t num_timestamps)
-  : time_length_(num_timestamps)
+  AgentData(
+    const std::vector<AgentHistory> & histories, const size_t num_timestamps,
+    const size_t max_num_agent = 32)
+  : max_num_agent_(max_num_agent), time_length_(num_timestamps)
   {
     fill_data(histories);
   }
@@ -481,7 +484,7 @@ struct AgentData
     fill_data(histories_);
   }
 
-  void trim_to_k_closest_agents(const geometry_msgs::msg::Point & position, const size_t k)
+  void trim_to_k_closest_agents(const geometry_msgs::msg::Point & position)
   {
     std::sort(
       histories_.begin(), histories_.end(),
@@ -489,6 +492,7 @@ struct AgentData
         return autoware_utils_geometry::calc_distance2d(position, a.get_latest_state_position()) <
                autoware_utils_geometry::calc_distance2d(position, b.get_latest_state_position());
       });
+    auto k = std::min(num_agent_, max_num_agent_);
     std::vector<AgentHistory> closest_agents(histories_.begin(), histories_.begin() + k);
     fill_data(closest_agents);
   }
@@ -537,6 +541,7 @@ private:
   std::vector<AgentHistory> histories_;
   std::unordered_map<std::string, size_t> histories_idx_map_;
   size_t num_agent_{0};
+  size_t max_num_agent_{0};
   size_t time_length_{0};
   std::vector<float> data_;
 };
