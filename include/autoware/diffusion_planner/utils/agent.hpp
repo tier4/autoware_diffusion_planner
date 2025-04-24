@@ -245,7 +245,7 @@ struct AgentHistory
    */
   AgentHistory(
     const AgentState & state, const size_t label_id, const double current_time,
-    const size_t max_time_length)
+    const size_t max_time_length, bool is_pad_history = true)
   : queue_(max_time_length),
     object_id_(state.object_id_),
     label_id_(label_id),
@@ -253,6 +253,9 @@ struct AgentHistory
     max_size_(max_time_length)
   {
     queue_.push_back(state);
+    if (is_pad_history) {
+      pad_history();
+    }
   }
 
   // Return the history time length `T`.
@@ -417,25 +420,26 @@ struct AgentData
       auto agent_state = AgentState(object);
       auto current_time = static_cast<double>(objects.header.stamp.sec) +
                           static_cast<double>(objects.header.stamp.nanosec) * 1e-9;
-      histories.emplace_back(agent_state, get_model_label(object), current_time, num_timestamps);
+      histories.emplace_back(
+        agent_state, get_model_label(object), current_time, num_timestamps, true);
     }
     fill_data(histories);
   }
 
-  /**
-   * @brief Construct a new instance.
-   *
-   * @param histories An array of histories for each object.
-   * @param num_agent Number of agents.
-   * @param num_timestamps Number of timestamps.
-   */
-  AgentData(
-    const std::vector<AgentHistory> & histories, const size_t max_num_agent = 32,
-    const size_t num_timestamps = 21)
-  : max_num_agent_(max_num_agent), time_length_(num_timestamps)
-  {
-    fill_data(histories);
-  }
+  // /**
+  //  * @brief Construct a new instance.
+  //  *
+  //  * @param histories An array of histories for each object.
+  //  * @param num_agent Number of agents.
+  //  * @param num_timestamps Number of timestamps.
+  //  */
+  // AgentData(
+  //   const std::vector<AgentHistory> & histories, const size_t max_num_agent = 32,
+  //   const size_t num_timestamps = 21)
+  // : max_num_agent_(max_num_agent), time_length_(num_timestamps)
+  // {
+  //   fill_data(histories);
+  // }
 
   void apply_transform(const TransformMatrix & transform)
   {
@@ -479,7 +483,8 @@ struct AgentData
         histories_[it->second].update(current_time, object);
       } else {
         auto agent_state = AgentState(object);
-        histories_.emplace_back(agent_state, get_model_label(object), current_time, time_length_);
+        histories_.emplace_back(
+          agent_state, get_model_label(object), current_time, time_length_, true);
       }
       found_ids.push_back(object_id);
     }
