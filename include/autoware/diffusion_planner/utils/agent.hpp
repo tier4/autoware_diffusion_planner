@@ -461,7 +461,6 @@ struct AgentData
       auto object_id = autoware_utils_uuid::to_hex_string(object.object_id);
       auto it = histories_idx_map_.find(object_id);
       if (it != histories_idx_map_.end()) {
-        std::cerr << "Updating history for object ID (2): " << object_id << std::endl;
         histories_[it->second].update(current_time, object);
       } else {
         auto agent_state = AgentState(object);

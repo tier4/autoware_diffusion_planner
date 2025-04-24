@@ -40,10 +40,8 @@ public:
   void push_back(const T && t) noexcept
   {
     if (queue_.size() >= max_size_) {
-      std::cerr << "Queue is full, removing the oldest element." << std::endl;
       queue_.pop_front();
     }
-    std::cerr << "pushing back (0)" << std::endl;
 
     queue_.push_back(t);
   }
@@ -51,10 +49,8 @@ public:
   void push_back(const T & t) noexcept
   {
     if (queue_.size() >= max_size_) {
-      std::cerr << "Queue is full, removing the oldest element." << std::endl;
       queue_.pop_front();
     }
-    std::cerr << "pushing back (1)" << std::endl;
     queue_.push_back(t);
   }
 
