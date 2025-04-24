@@ -79,42 +79,24 @@ void DiffusionPlanner::on_timer()
   }
 
   if (!agent_data_) {
-    agent_data_ = AgentData(*objects, neighbor_agents_past_shape_[2]);
+    agent_data_ =
+      AgentData(*objects, neighbor_agents_past_shape_[1], neighbor_agents_past_shape_[2]);
   } else {
     agent_data_->update_histories(*objects);
   }
 
-  geometry_msgs::msg::TransformStamped transform_stamped =
-    create_transform_from_odometry(*ego_kinematic_state);
-  // transform_stamped.transform.translation.x = ego_kinematic_state->pose.pose.position.x;
-  // transform_stamped.transform.translation.y = ego_kinematic_state->pose.pose.position.y;
-  // transform_stamped.transform.translation.z = ego_kinematic_state->pose.pose.position.z;
-  // transform_stamped.transform.rotation = ego_kinematic_state->pose.pose.orientation;
-  // try {
-  //   transform_stamped = tf_buffer_.lookupTransform("base_link", objects->header.frame_id, now());
-  // } catch (tf2::TransformException & ex) {
-  //   RCLCPP_ERROR_STREAM(
-  //     get_logger(), "[DiffusionPlanner] Failed to look up transform from map to base_link");
-  //   return;
-  // }
-
-  std::cerr << "Transform DP translation: " << transform_stamped.transform.translation.x << ", "
-            << transform_stamped.transform.translation.y << ", "
-            << transform_stamped.transform.translation.z << std::endl;
-  std::cerr << "Transform DP rotation: " << transform_stamped.transform.rotation.x << ", "
-            << transform_stamped.transform.rotation.y << ", "
-            << transform_stamped.transform.rotation.z << ", "
-            << transform_stamped.transform.rotation.w << std::endl;
+  std::pair<TransformMatrix, TransformMatrix> transforms =
+    get_transform_matrix(*ego_kinematic_state);
   auto ego_centric_data = agent_data_.value();
-  ego_centric_data.apply_transform(transform_stamped);
-  // geometry_msgs::msg::Point position;
-  // position.x = 0.0;
-  // position.y = 0.0;
-  // position.z = 0.0;
-  // agent_data_->trim_to_k_closest_agents(position);
+  ego_centric_data.apply_transform(transforms.second);
+  geometry_msgs::msg::Point position;
+  position.x = 0.0;
+  position.y = 0.0;
+  position.z = 0.0;
+  ego_centric_data.trim_to_k_closest_agents(position);
 
   std::cerr << "Agent Data: " << ego_centric_data.to_string() << std::endl;
-
+  // Prepare input data for the model
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
   Ort::Allocator cuda_allocator(session_, mem_info);

@@ -15,6 +15,7 @@
 #ifndef AUTOWARE__DIFFUSION_PLANNER__AGENT_HPP_
 #define AUTOWARE__DIFFUSION_PLANNER__AGENT_HPP_
 
+#include "Eigen/Dense"
 #include "autoware/diffusion_planner/utils/fixed_queue.hpp"
 #include "autoware/object_recognition_utils/object_recognition_utils.hpp"
 #include "autoware_utils_geometry/geometry.hpp"
@@ -30,6 +31,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -42,8 +44,9 @@
 namespace autoware::diffusion_planner
 {
 using autoware_perception_msgs::msg::TrackedObject;
+using TransformMatrix = Eigen::Matrix4d;
 
-constexpr size_t AgentStateDim = 11;
+constexpr size_t AGENT_STATE_DIM = 11;
 
 enum AgentLabel { VEHICLE = 0, PEDESTRIAN = 1, BICYCLE = 2 };
 
@@ -133,7 +136,7 @@ struct AgentState
   static AgentState empty() noexcept { return {}; }
 
   // Return the agent state dimensions `D`.
-  static size_t dim() { return AgentStateDim; }
+  static size_t dim() { return AGENT_STATE_DIM; }
 
   // Return the x position.
   [[nodiscard]] float x() const { return position_.x; }
@@ -162,38 +165,45 @@ struct AgentState
   // Return the y velocity.
   [[nodiscard]] float vy() const { return velocity_.y; }
 
-  void apply_transform(const geometry_msgs::msg::TransformStamped & transform_stamped)
+  void apply_transform(const TransformMatrix & transform)
   {
-    tf2::doTransform(position_, position_, transform_stamped);
-    tf2::doTransform(velocity_, velocity_, transform_stamped);
+    Eigen::Vector4d pos_vec(position_.x, position_.y, position_.z, 1.0);
+    Eigen::Vector4d transformed_pos = transform * pos_vec;
+    position_.x = transformed_pos.x();
+    position_.y = transformed_pos.y();
+    position_.z = transformed_pos.z();
 
-    // Apply only rotation to the yaw direction vector
-    tf2::Quaternion q;
-    tf2::fromMsg(transform_stamped.transform.rotation, q);
-
-    // Construct the original direction vector as tf2::Vector3
-    tf2::Vector3 original_direction(cos_yaw_, sin_yaw_, 0.0);
-    tf2::Vector3 rotated_direction = tf2::quatRotate(q, original_direction);
-
-    cos_yaw_ = rotated_direction.x();
-    sin_yaw_ = rotated_direction.y();
+    Eigen::Vector4d dir_vec(cos_yaw_, sin_yaw_, 0.0, 0.0);
+    Eigen::Vector4d transformed_dir = transform * dir_vec;
+    cos_yaw_ = transformed_dir.x();
+    sin_yaw_ = transformed_dir.y();
     yaw_ = std::atan2(sin_yaw_, cos_yaw_);
+
+    auto velocity_norm = std::hypot(velocity_.x, velocity_.y);
+    velocity_.x = velocity_norm * cos_yaw_;
+    velocity_.y = velocity_norm * sin_yaw_;
   }
 
   [[nodiscard]] std::string to_string() const
   {
+    constexpr std::array<const char *, AGENT_STATE_DIM> field_names = {
+      "x",      "y",     "cos_yaw",       "sin_yaw",          "vx",           "vy",
+      "length", "width", "label_vehicle", "label_pedestrian", "label_bicycle"};
     std::ostringstream oss;
-    oss << "AgentState("
-        << "position: (" << position_.x << ", " << position_.y << ", " << position_.z << "), "
-        << "dimension: (" << dimension_.x << ", " << dimension_.y << ", " << dimension_.z << "), "
-        << "yaw: " << yaw_ << ", "
-        << "velocity: (" << velocity_.x << ", " << velocity_.y << ", " << velocity_.z << "), "
-        << "label: " << static_cast<int>(label_) << ")";
+    auto data = as_array();
+    oss << "AgentState: [";
+    for (size_t i = 0; i < AGENT_STATE_DIM; ++i) {
+      oss << field_names[i] << ": " << data[i];
+      if (i != AGENT_STATE_DIM - 1) {
+        oss << ", ";
+      }
+    }
+    oss << "]\n";
     return oss.str();
   }
 
   // Return the state attribute as an array.
-  [[nodiscard]] std::array<float, AgentStateDim> as_array() const noexcept
+  [[nodiscard]] std::array<float, AGENT_STATE_DIM> as_array() const noexcept
   {
     return {
       x(),
@@ -250,7 +260,7 @@ struct AgentHistory
   [[nodiscard]] size_t length() const { return max_size_; }
 
   // Return the number of agent state dimensions `D`.
-  static size_t state_dim() { return AgentStateDim; }
+  static size_t state_dim() { return AGENT_STATE_DIM; }
 
   // Return the data size of history `T * D`.
   [[nodiscard]] size_t size() const { return max_size_ * state_dim(); }
@@ -357,10 +367,10 @@ struct AgentHistory
     }
   }
 
-  void apply_transform(const geometry_msgs::msg::TransformStamped & transform_stamped)
+  void apply_transform(const TransformMatrix & transform)
   {
     for (auto & state : queue_) {
-      state.apply_transform(transform_stamped);
+      state.apply_transform(transform);
     }
   }
   [[nodiscard]] std::string to_string() const
@@ -399,8 +409,8 @@ struct AgentData
    * @param num_timestamps Number of timestamps.
    */
   AgentData(
-    const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t num_timestamps,
-    const size_t max_num_agent = 32)
+    const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t max_num_agent = 32,
+    const size_t num_timestamps = 21)
   : max_num_agent_(max_num_agent), time_length_(num_timestamps)
   {
     std::vector<AgentHistory> histories;
@@ -421,23 +431,23 @@ struct AgentData
    * @param num_timestamps Number of timestamps.
    */
   AgentData(
-    const std::vector<AgentHistory> & histories, const size_t num_timestamps,
-    const size_t max_num_agent = 32)
+    const std::vector<AgentHistory> & histories, const size_t max_num_agent = 32,
+    const size_t num_timestamps = 21)
   : max_num_agent_(max_num_agent), time_length_(num_timestamps)
   {
     fill_data(histories);
   }
 
-  void apply_transform(const geometry_msgs::msg::TransformStamped & transform_stamped)
+  void apply_transform(const TransformMatrix & transform)
   {
     for (auto & history : histories_) {
-      history.apply_transform(transform_stamped);
+      history.apply_transform(transform);
     }
     fill_data(histories_);
   }
 
   // fill data array
-  void fill_data(const std::vector<AgentHistory> & histories)
+  void fill_data(const std::vector<AgentHistory> & histories, bool pad_with_zeroes = true)
   {
     num_agent_ = histories.size();
     histories_ = histories;
@@ -451,6 +461,14 @@ struct AgentData
       for (const auto & v : history.as_array()) {
         data_.push_back(v);
       }
+    }
+    std::cerr << "AgentData::fill_data: data size: " << data_.size() << std::endl;
+    std::cerr << "max_num_agent_: " << max_num_agent_ << std::endl;
+    if (pad_with_zeroes) {
+      // for (size_t i = data_.size(); i < max_num_agent_ * time_length_ * state_dim(); ++i) {
+      //   data_.push_back(0.0f);
+      // }
+      data_.resize(max_num_agent_ * time_length_ * state_dim(), 0.0f);
     }
   }
 
@@ -506,7 +524,7 @@ struct AgentData
   size_t time_length() const { return time_length_; }
 
   // Return the number of agent state dimensions `D`.
-  static size_t state_dim() { return AgentStateDim; }
+  static size_t state_dim() { return AGENT_STATE_DIM; }
 
   // Return the number of all elements `N*T*D`.
   size_t size() const { return num_agent_ * time_length_ * state_dim(); }
@@ -526,6 +544,7 @@ struct AgentData
     oss << "AgentData("
         << "num_agent: " << num_agent_ << ", "
         << "time_length: " << time_length_ << ", "
+        << "state_dim: " << state_dim() << ", "
         << "data_size: " << data_.size() << ")";
     for (const auto & history : histories_) {
       oss << "\n  " << history.to_string();

@@ -20,6 +20,7 @@
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+#include <Eigen/Dense>
 #include <autoware_utils/ros/update_param.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 #include <rclcpp/subscription.hpp>
@@ -50,25 +51,43 @@ using autoware_planning_msgs::msg::Trajectory;
 using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 
-geometry_msgs::msg::TransformStamped create_transform_from_odometry(
-  const nav_msgs::msg::Odometry & ego_kinematic_state)
+using TransformMatrix = Eigen::Matrix4d;
+
+std::pair<TransformMatrix, TransformMatrix> get_transform_matrix(
+  const nav_msgs::msg::Odometry & msg)
 {
-  geometry_msgs::msg::TransformStamped transform_stamped;
+  // Extract position
+  double x = msg.pose.pose.position.x;
+  double y = msg.pose.pose.position.y;
+  double z = msg.pose.pose.position.z;
 
-  // Set header info
-  transform_stamped.header.stamp = ego_kinematic_state.header.stamp;
-  transform_stamped.header.frame_id = "map";       // Parent frame
-  transform_stamped.child_frame_id = "base_link";  // Child frame
+  // Extract orientation
+  double qx = msg.pose.pose.orientation.x;
+  double qy = msg.pose.pose.orientation.y;
+  double qz = msg.pose.pose.orientation.z;
+  double qw = msg.pose.pose.orientation.w;
 
-  // Set translation (position)
-  transform_stamped.transform.translation.x = -ego_kinematic_state.pose.pose.position.x;
-  transform_stamped.transform.translation.y = -ego_kinematic_state.pose.pose.position.y;
-  transform_stamped.transform.translation.z = -ego_kinematic_state.pose.pose.position.z;
+  // Create Eigen quaternion and normalize it just in case
+  Eigen::Quaterniond q(qw, qx, qy, qz);
+  q.normalize();
 
-  // Set rotation (orientation)
-  transform_stamped.transform.rotation = ego_kinematic_state.pose.pose.orientation;
+  // Rotation matrix (3x3)
+  Eigen::Matrix3d R = q.toRotationMatrix();
 
-  return transform_stamped;
+  // Translation vector
+  Eigen::Vector3d t(x, y, z);
+
+  // Base_link → Map (forward)
+  TransformMatrix bl2map = TransformMatrix::Identity();
+  bl2map.block<3, 3>(0, 0) = R;
+  bl2map.block<3, 1>(0, 3) = t;
+
+  // Map → Base_link (inverse)
+  TransformMatrix map2bl = TransformMatrix::Identity();
+  map2bl.block<3, 3>(0, 0) = R.transpose();
+  map2bl.block<3, 1>(0, 3) = -R.transpose() * t;
+
+  return {bl2map, map2bl};
 }
 
 struct DiffusionPlannerParams
