@@ -14,6 +14,8 @@
 
 #include "autoware/diffusion_planner/diffusion_planner_node.hpp"
 
+#include "autoware/diffusion_planner/utils/agent.hpp"
+#include "autoware/diffusion_planner/utils/ego.hpp"
 #include "onnxruntime_cxx_api.h"
 
 #include <cstdint>
@@ -69,44 +71,68 @@ void DiffusionPlanner::on_timer()
 {
   // Timer callback function
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
+  auto objects = sub_tracked_objects_.take_data();
+  auto ego_kinematic_state = sub_current_odometry_.take_data();
+  auto ego_acceleration = sub_current_acceleration_.take_data();
+
+  if (!objects || !ego_kinematic_state || !ego_acceleration) {
+    RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state data received");
+    return;
+  }
+
+  EgoState ego_state(
+    *ego_kinematic_state, *ego_acceleration, 5.0);  // TODO(Daniel): use vehicle_info_utils
+
+  std::cerr << ego_state.to_string() << "\n";
+
+  if (!agent_data_) {
+    agent_data_ =
+      AgentData(*objects, neighbor_agents_past_shape_[1], neighbor_agents_past_shape_[2]);
+  } else {
+    agent_data_->update_histories(*objects);
+  }
+
+  std::pair<TransformMatrix, TransformMatrix> transforms =
+    get_transform_matrix(*ego_kinematic_state);
+  auto ego_centric_data = agent_data_.value();
+  ego_centric_data.apply_transform(transforms.second);
+  geometry_msgs::msg::Point position;
+  position.x = 0.0;
+  position.y = 0.0;
+  position.z = 0.0;
+  ego_centric_data.trim_to_k_closest_agents(position);
+
+  std::cerr << "Agent Data: " << ego_centric_data.to_string() << std::endl;
+  // Prepare input data for the model
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::MemoryInfo cuda_mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
 
   Ort::Allocator cuda_allocator(session_, mem_info);
 
-  const std::vector<int64_t> ego_current_state_shape = {1, 10};
-  const std::vector<int64_t> neighbor_agents_past_shape = {1, 32, 21, 11};
-  const std::vector<int64_t> lane_has_speed_limit_shape = {1, 70, 1};
-  const std::vector<int64_t> static_objects_shape = {1, 5, 10};
-  const std::vector<int64_t> lanes_shape = {1, 70, 20, 12};
-  const std::vector<int64_t> lanes_speed_limit_shape = {1, 70, 1};
-  const std::vector<int64_t> lanes_has_speed_limit_shape = {1, 70, 1};
-  const std::vector<int64_t> route_lanes_shape = {1, 25, 20, 12};
-
-  auto ego_current_state = create_float_data(ego_current_state_shape);
-  auto neighbor_agents_past = create_float_data(neighbor_agents_past_shape);
-  auto static_objects = create_float_data(static_objects_shape);
-  auto lanes = create_float_data(lanes_shape);
-  auto lanes_speed_limit = create_float_data(lanes_speed_limit_shape);
-  auto route_lanes = create_float_data(route_lanes_shape);
+  auto ego_current_state = create_float_data(ego_current_state_shape_);
+  auto neighbor_agents_past = create_float_data(neighbor_agents_past_shape_);
+  auto static_objects = create_float_data(static_objects_shape_);
+  auto lanes = create_float_data(lanes_shape_);
+  auto lanes_speed_limit = create_float_data(lanes_speed_limit_shape_);
+  auto route_lanes = create_float_data(route_lanes_shape_);
 
   auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, ego_current_state.data(), ego_current_state.size(), ego_current_state_shape.data(),
-    ego_current_state_shape.size());
+    mem_info, ego_current_state.data(), ego_current_state.size(), ego_current_state_shape_.data(),
+    ego_current_state_shape_.size());
   auto neighbor_agents_past_tensor = Ort::Value::CreateTensor<float>(
     mem_info, neighbor_agents_past.data(), neighbor_agents_past.size(),
-    neighbor_agents_past_shape.data(), neighbor_agents_past_shape.size());
+    neighbor_agents_past_shape_.data(), neighbor_agents_past_shape_.size());
   auto static_objects_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, static_objects.data(), static_objects.size(), static_objects_shape.data(),
-    static_objects_shape.size());
+    mem_info, static_objects.data(), static_objects.size(), static_objects_shape_.data(),
+    static_objects_shape_.size());
   auto lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes.data(), lanes.size(), lanes_shape.data(), lanes_shape.size());
+    mem_info, lanes.data(), lanes.size(), lanes_shape_.data(), lanes_shape_.size());
   auto lanes_speed_limit_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes_speed_limit.data(), lanes_speed_limit.size(), lanes_speed_limit_shape.data(),
-    lanes_speed_limit_shape.size());
+    mem_info, lanes_speed_limit.data(), lanes_speed_limit.size(), lanes_speed_limit_shape_.data(),
+    lanes_speed_limit_shape_.size());
 
   size_t total_size = std::accumulate(
-    lane_has_speed_limit_shape.begin(), lane_has_speed_limit_shape.end(), 1,
+    lane_has_speed_limit_shape_.begin(), lane_has_speed_limit_shape_.end(), 1,
     std::multiplies<int64_t>());
   std::vector<std::shared_ptr<void>> keep_alive_blobs_;
   // Allocate raw memory for bool array
@@ -115,13 +141,13 @@ void DiffusionPlanner::on_timer()
   std::fill(raw_bool_array.get(), raw_bool_array.get() + total_size, true);
   // Create the tensor
   auto lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
-    mem_info, raw_bool_array.get(), total_size, lanes_has_speed_limit_shape.data(),
-    lanes_has_speed_limit_shape.size());
+    mem_info, raw_bool_array.get(), total_size, lanes_has_speed_limit_shape_.data(),
+    lanes_has_speed_limit_shape_.size());
   // Ensure the tensor's data is kept alive
   keep_alive_blobs_.emplace_back(raw_bool_array);
   auto route_lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, route_lanes.data(), route_lanes.size(), route_lanes_shape.data(),
-    route_lanes_shape.size());
+    mem_info, route_lanes.data(), route_lanes.size(), route_lanes_shape_.data(),
+    route_lanes_shape_.size());
 
   Ort::Value input_tensors[] = {
     std::move(ego_current_state_tensor), std::move(neighbor_agents_past_tensor),
@@ -140,11 +166,11 @@ void DiffusionPlanner::on_timer()
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
     std::cout << "Inference ran successfully, got " << output.size() << " outputs." << std::endl;
-    auto data = output[0].GetTensorMutableData<float>();
+    // auto data = output[0].GetTensorMutableData<float>();
     std::cout << "Output data: ";
-    for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
-      std::cout << data[i] << " ";
-    }
+    // for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
+    //   std::cout << data[i] << " ";
+    // }
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
   }
