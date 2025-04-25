@@ -33,6 +33,14 @@ rclcpp_components_register_node(autoware_diffusion_planner_component
   EXECUTABLE autoware_diffusion_planner_node
 )
 
+if(BUILD_TESTING)
+  ament_add_ros_isolated_gtest(test_diffusion_planner
+  tests/agent_test.cpp)
+
+target_link_libraries(test_diffusion_planner autoware_diffusion_planner_component)
+
+endif()
+
 ament_auto_package(
   INSTALL_TO_SHARE
   config

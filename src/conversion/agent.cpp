@@ -230,7 +230,6 @@ void AgentData::update_histories(const autoware_perception_msgs::msg::TrackedObj
 {
   auto current_time = static_cast<double>(objects.header.stamp.sec) +
                       static_cast<double>(objects.header.stamp.nanosec) * 1e-9;
-  auto updated_histories_ = histories_;
   std::vector<std::string> found_ids;
   for (auto object : objects.objects) {
     auto object_id = autoware_utils_uuid::to_hex_string(object.object_id);
