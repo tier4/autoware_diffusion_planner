@@ -16,11 +16,13 @@
 #define AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
+#include "autoware/diffusion_planner/conversion/lanelet.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #include <Eigen/Dense>
+#include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_utils/ros/update_param.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
 #include <rclcpp/subscription.hpp>
@@ -28,6 +30,7 @@
 
 #include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include <autoware_map_msgs/msg/detail/lanelet_map_bin__struct.hpp>
 #include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
 #include <autoware_perception_msgs/msg/detail/tracked_objects__struct.hpp>
 #include <autoware_perception_msgs/msg/tracked_objects.hpp>
@@ -35,6 +38,9 @@
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
 
+#include <lanelet2_core/LaneletMap.h>
+#include <lanelet2_routing/RoutingGraph.h>
+#include <lanelet2_traffic_rules/TrafficRules.h>
 #include <onnxruntime_cxx_api.h>
 
 #include <memory>
@@ -45,11 +51,11 @@ namespace autoware::diffusion_planner
 using autoware::diffusion_planner::AgentData;
 using autoware_map_msgs::msg::LaneletMapBin;
 using autoware_perception_msgs::msg::TrackedObjects;
-using autoware_perception_msgs::msg::TrafficSignal;
 using autoware_planning_msgs::msg::LaneletRoute;
 using autoware_planning_msgs::msg::Trajectory;
 using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
+using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
 
 using TransformMatrix = Eigen::Matrix4d;
 
@@ -115,6 +121,7 @@ public:
   explicit DiffusionPlanner(const rclcpp::NodeOptions & options);
   void set_up_params();
   void on_timer();
+  void on_map(const HADMapBin::ConstSharedPtr map_msg);
   void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
   void load_model(const std::string & model_path);
 
@@ -142,6 +149,13 @@ public:
   DiffusionPlannerParams params_;
   DiffusionPlannerDebugParams debug_params_;
 
+  // Lanelet map pointers
+  std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
+  std::shared_ptr<lanelet::routing::RoutingGraph> routing_graph_ptr_;
+  std::shared_ptr<lanelet::traffic_rules::TrafficRules> traffic_rules_ptr_;
+  std::unique_ptr<LaneletConverter> lanelet_converter_ptr_;
+  std::vector<LaneSegment> lane_segments_;
+
   // Node elements
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
@@ -162,6 +176,7 @@ public:
   autoware_utils::InterProcessPollingSubscriber<
     LaneletMapBin, autoware_utils::polling_policy::Newest>
     vector_map_subscriber_{this, "~/input/vector_map", rclcpp::QoS{1}.transient_local()};
+  rclcpp::Subscription<HADMapBin>::SharedPtr sub_map_;
 
   tf2_ros::Buffer tf_buffer_{get_clock()};
   tf2_ros::TransformListener tf_listener_{tf_buffer_};

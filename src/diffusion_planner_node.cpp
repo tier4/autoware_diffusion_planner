@@ -47,6 +47,10 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   timer_ = rclcpp::create_timer(
     this, get_clock(), rclcpp::Rate(params_.planning_frequency_hz).period(),
     std::bind(&DiffusionPlanner::on_timer, this));
+
+  sub_map_ = create_subscription<HADMapBin>(
+    "~/input/vector_map", rclcpp::QoS{1}.transient_local(),
+    std::bind(&DiffusionPlanner::on_map, this, std::placeholders::_1));
 }
 
 void DiffusionPlanner::set_up_params()
@@ -174,6 +178,16 @@ void DiffusionPlanner::on_timer()
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
   }
+}
+
+void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
+{
+  lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
+  lanelet::utils::conversion::fromBinMsg(
+    *map_msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
+
+  lanelet_converter_ptr_ = std::make_unique<LaneletConverter>(lanelet_map_ptr_, 100, 20, 100.0);
+  lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments();
 }
 
 void DiffusionPlanner::on_parameter(
