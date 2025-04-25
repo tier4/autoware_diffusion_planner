@@ -19,6 +19,8 @@ include_directories(
 
 ament_auto_add_library(autoware_diffusion_planner_component SHARED
   src/diffusion_planner_node.cpp
+  src/conversion/agent.cpp
+  src/conversion/ego.cpp
 )
 
 target_link_libraries(autoware_diffusion_planner_component

@@ -1,4 +1,4 @@
-// Copyright 2024 TIER IV, Inc.
+// Copyright 2025 TIER IV, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,10 +16,6 @@
 #define AUTOWARE__DIFFUSION_PLANNER__EGO_HPP_
 
 #include "Eigen/Dense"
-#include "autoware/diffusion_planner/utils/fixed_queue.hpp"
-#include "autoware/object_recognition_utils/object_recognition_utils.hpp"
-#include "autoware_utils_geometry/geometry.hpp"
-#include "autoware_utils_uuid/uuid_helper.hpp"
 
 #include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -59,45 +55,8 @@ struct EgoState
 
   EgoState(
     const nav_msgs::msg::Odometry & kinematic_state_msg,
-    const geometry_msgs::msg::AccelWithCovarianceStamped & acceleration_msg, float wheel_base)
-  {
-    const auto & lin = kinematic_state_msg.twist.twist.linear;
-    const auto & ang = kinematic_state_msg.twist.twist.angular;
-
-    const float linear_vel = std::hypot(lin.x, lin.y);
-
-    if (linear_vel < 0.2f) {
-      yaw_rate_ = 0.0f;
-      steering_angle_ = 0.0f;
-    } else {
-      yaw_rate_ = std::clamp(static_cast<float>(ang.z), -MAX_YAW_RATE, MAX_YAW_RATE);
-      float raw_steer = std::atan(yaw_rate_ * wheel_base / std::abs(linear_vel));
-      steering_angle_ = std::clamp(raw_steer, -MAX_STEER_ANGLE, MAX_STEER_ANGLE);
-    }
-
-    vx_ = lin.x;
-    vy_ = lin.y;
-    ax_ = acceleration_msg.accel.accel.linear.x;
-    ay_ = acceleration_msg.accel.accel.linear.y;
-    data_ = {x_, y_, cos_yaw_, sin_yaw_, vx_, vy_, ax_, ay_, steering_angle_, yaw_rate_};
-  }
-  [[nodiscard]] std::string to_string() const
-  {
-    std::ostringstream oss;
-    oss << "EgoState: [";
-    oss << "x: " << x_ << ", ";
-    oss << "y: " << y_ << ", ";
-    oss << "cos_yaw: " << cos_yaw_ << ", ";
-    oss << "sin_yaw: " << sin_yaw_ << ", ";
-    oss << "vx: " << vx_ << ", ";
-    oss << "vy: " << vy_ << ", ";
-    oss << "ax: " << ax_ << ", ";
-    oss << "ay: " << ay_ << ", ";
-    oss << "steering_angle: " << steering_angle_ << ", ";
-    oss << "yaw_rate: " << yaw_rate_;
-    oss << "]";
-    return oss.str();
-  }
+    const geometry_msgs::msg::AccelWithCovarianceStamped & acceleration_msg, float wheel_base);
+  [[nodiscard]] std::string to_string() const;
 
   [[nodiscard]] std::array<float, EGO_STATE_DIM> as_array() const noexcept { return data_; }
   [[nodiscard]] const float * data_ptr() const noexcept { return data_.data(); }
