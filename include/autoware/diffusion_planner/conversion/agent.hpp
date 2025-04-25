@@ -263,7 +263,7 @@ struct AgentData
    * @param num_agent Number of agents.
    * @param num_timestamps Number of timestamps.
    */
-  AgentData(
+  explicit AgentData(
     const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t max_num_agent = 32,
     const size_t num_timestamps = 21);
 
