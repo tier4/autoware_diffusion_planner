@@ -15,7 +15,7 @@
 #ifndef AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
 #define AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
 
-#include "autoware/diffusion_planner/utils/agent.hpp"
+#include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"

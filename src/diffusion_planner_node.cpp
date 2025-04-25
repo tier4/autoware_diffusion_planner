@@ -14,8 +14,8 @@
 
 #include "autoware/diffusion_planner/diffusion_planner_node.hpp"
 
-#include "autoware/diffusion_planner/utils/agent.hpp"
-#include "autoware/diffusion_planner/utils/ego.hpp"
+#include "autoware/diffusion_planner/conversion/agent.hpp"
+#include "autoware/diffusion_planner/conversion/ego.hpp"
 #include "onnxruntime_cxx_api.h"
 
 #include <cstdint>
