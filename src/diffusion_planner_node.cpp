@@ -18,6 +18,7 @@
 #include "autoware/diffusion_planner/conversion/ego.hpp"
 #include "onnxruntime_cxx_api.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <numeric>
@@ -80,6 +81,11 @@ void DiffusionPlanner::on_timer()
   auto ego_kinematic_state = sub_current_odometry_.take_data();
   auto ego_acceleration = sub_current_acceleration_.take_data();
 
+  if (!is_map_loaded_) {
+    RCLCPP_INFO(get_logger(), "Waiting for map data...");
+    return;
+  }
+
   if (!objects || !ego_kinematic_state || !ego_acceleration) {
     RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state data received");
     return;
@@ -97,10 +103,11 @@ void DiffusionPlanner::on_timer()
     agent_data_->update_histories(*objects);
   }
 
-  std::pair<TransformMatrix, TransformMatrix> transforms =
+  std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms =
     get_transform_matrix(*ego_kinematic_state);
   auto ego_centric_data = agent_data_.value();
-  ego_centric_data.apply_transform(transforms.second);
+  auto map_to_ego_transform = transforms.second;
+  ego_centric_data.apply_transform(map_to_ego_transform);
   geometry_msgs::msg::Point position;
   position.x = 0.0;
   position.y = 0.0;
@@ -108,9 +115,22 @@ void DiffusionPlanner::on_timer()
   ego_centric_data.trim_to_k_closest_agents(position);
 
   std::cerr << "Agent Data: " << ego_centric_data.to_string() << std::endl;
+
+  Eigen::MatrixXf ego_centric_lane_segments;
+  transform_and_select_rows(
+    map_lane_segments_matrix_, map_to_ego_transform, 10, ego_centric_lane_segments);
+
+  std::cerr << "Ego centric Lane segments matrix: " << ego_centric_lane_segments.rows() << "x"
+            << ego_centric_lane_segments.cols() << std::endl;
+
+  for (long i = 0; i < ego_centric_lane_segments.rows(); ++i) {
+    for (long j = 0; j < ego_centric_lane_segments.cols(); ++j) {
+      std::cerr << ego_centric_lane_segments(i, j) << " ";
+    }
+    std::cerr << std::endl;
+  }
   // Prepare input data for the model
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-
   Ort::Allocator cuda_allocator(session_, mem_info);
 
   auto ego_current_state = create_float_data(ego_current_state_shape_);
@@ -182,12 +202,45 @@ void DiffusionPlanner::on_timer()
 
 void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
 {
+  std::cerr << "Received map message" << std::endl;
   lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
   lanelet::utils::conversion::fromBinMsg(
     *map_msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 
   lanelet_converter_ptr_ = std::make_unique<LaneletConverter>(lanelet_map_ptr_, 100, 20, 100.0);
   lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments();
+
+  if (lane_segments_.empty()) {
+    RCLCPP_WARN(get_logger(), "No lane segments found in the map");
+    throw std::runtime_error("No lane segments found in the map");
+  }
+
+  map_lane_segments_matrix_ =
+    lanelet_converter_ptr_->process_segments_to_matrix(lane_segments_, 0.0, 0.0, 100000000.0);
+
+  is_map_loaded_ = true;
+  std::cerr << "Lane segments matrix: " << map_lane_segments_matrix_.rows() << "x"
+            << map_lane_segments_matrix_.cols() << std::endl;
+
+  for (long i = 0; i < map_lane_segments_matrix_.rows(); ++i) {
+    for (long j = 0; j < map_lane_segments_matrix_.cols(); ++j) {
+      std::cerr << map_lane_segments_matrix_(i, j) << " ";
+    }
+    std::cerr << std::endl;
+  }
+
+  // for (size_t i = 0; i < lane_segments_.size(); ++i) {
+  //   const auto & lane_segment = lane_segments_[i];
+  //   auto m =
+  //     lanelet_converter_ptr_->process_segment_to_vector(lane_segment, 0.0, 100.0, 100000000.0);
+  //   // print the Eigen matrixXf m
+  //   for (long j = 0; j < m.rows(); ++j) {
+  //     for (long k = 0; k < m.cols(); ++k) {
+  //       std::cerr << m(j, k) << " ";
+  //     }
+  //     std::cerr << std::endl;
+  //   }
+  // }
 }
 
 void DiffusionPlanner::on_parameter(

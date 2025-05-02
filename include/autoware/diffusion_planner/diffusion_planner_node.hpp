@@ -57,9 +57,7 @@ using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
 
-using TransformMatrix = Eigen::Matrix4d;
-
-std::pair<TransformMatrix, TransformMatrix> get_transform_matrix(
+std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
   const nav_msgs::msg::Odometry & msg)
 {
   // Extract position
@@ -74,22 +72,22 @@ std::pair<TransformMatrix, TransformMatrix> get_transform_matrix(
   double qw = msg.pose.pose.orientation.w;
 
   // Create Eigen quaternion and normalize it just in case
-  Eigen::Quaterniond q(qw, qx, qy, qz);
+  Eigen::Quaternionf q(qw, qx, qy, qz);
   q.normalize();
 
   // Rotation matrix (3x3)
-  Eigen::Matrix3d R = q.toRotationMatrix();
+  Eigen::Matrix3f R = q.toRotationMatrix();
 
   // Translation vector
-  Eigen::Vector3d t(x, y, z);
+  Eigen::Vector3f t(x, y, z);
 
   // Base_link → Map (forward)
-  TransformMatrix bl2map = TransformMatrix::Identity();
+  Eigen::Matrix4f bl2map = Eigen::Matrix4f::Identity();
   bl2map.block<3, 3>(0, 0) = R;
   bl2map.block<3, 1>(0, 3) = t;
 
   // Map → Base_link (inverse)
-  TransformMatrix map2bl = TransformMatrix::Identity();
+  Eigen::Matrix4f map2bl = Eigen::Matrix4f::Identity();
   map2bl.block<3, 3>(0, 0) = R.transpose();
   map2bl.block<3, 1>(0, 3) = -R.transpose() * t;
 
@@ -149,12 +147,14 @@ public:
   DiffusionPlannerParams params_;
   DiffusionPlannerDebugParams debug_params_;
 
-  // Lanelet map pointers
+  // Lanelet map
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
   std::shared_ptr<lanelet::routing::RoutingGraph> routing_graph_ptr_;
   std::shared_ptr<lanelet::traffic_rules::TrafficRules> traffic_rules_ptr_;
   std::unique_ptr<LaneletConverter> lanelet_converter_ptr_;
   std::vector<LaneSegment> lane_segments_;
+  Eigen::MatrixXf map_lane_segments_matrix_;
+  bool is_map_loaded_{false};
 
   // Node elements
   rclcpp::TimerBase::SharedPtr timer_;

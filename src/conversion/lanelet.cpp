@@ -23,6 +23,7 @@
 #include <lanelet2_core/Forward.h>
 
 #include <cmath>
+#include <iostream>
 #include <optional>
 #include <vector>
 
@@ -168,19 +169,21 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
       // TODO (Daniel avoid unnecessary copy and creation)
       // TODO(Daniel): magic number num points
       auto points = fromLinestring(lanelet.centerline3d());
-      lane_polyline.assign_waypoints(interpolate_points(points, 20));
+      lane_polyline.assign_waypoints(interpolate_points(points, LANE_POINTS));
 
       // convert boundaries except of virtual lines
       if (!isTurnableIntersection(lanelet)) {
         const auto left_bound = lanelet.leftBound3d();
         if (isBoundaryLike(left_bound)) {
           auto points = fromLinestring(left_bound);
-          left_boundary_segments.emplace_back(MapType::Unused, interpolate_points(points, 20));
+          left_boundary_segments.emplace_back(
+            MapType::Unused, interpolate_points(points, LANE_POINTS));
         }
         const auto right_bound = lanelet.rightBound3d();
         if (isBoundaryLike(right_bound)) {
           auto points = fromLinestring(right_bound);
-          right_boundary_segments.emplace_back(MapType::Unused, interpolate_points(points, 20));
+          right_boundary_segments.emplace_back(
+            MapType::Unused, interpolate_points(points, LANE_POINTS));
         }
       }
       constexpr float kph2mph = 0.621371;
@@ -199,6 +202,99 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
     }
   }
   return lane_segments;
+}
+
+[[nodiscard]] Eigen::MatrixXf LaneletConverter::process_segments_to_matrix(
+  const std::vector<LaneSegment> & lane_segments, float center_x, float center_y,
+  float mask_range) const
+{
+  std::vector<Eigen::MatrixXf> all_segment_matrices;
+  size_t total_rows = 0;
+
+  for (const auto & segment : lane_segments) {
+    Eigen::MatrixXf segment_matrix =
+      process_segment_to_matrix(segment, center_x, center_y, mask_range);
+    if (segment_matrix.rows() < 1) {
+      continue;
+    }
+    total_rows += segment_matrix.rows();
+    all_segment_matrices.push_back(std::move(segment_matrix));
+  }
+
+  // Now allocate the full matrix
+  const int cols = all_segment_matrices.empty() ? 0 : all_segment_matrices[0].cols();
+  Eigen::MatrixXf stacked_matrix(total_rows, cols);
+
+  size_t current_row = 0;
+  for (const auto & mat : all_segment_matrices) {
+    stacked_matrix.middleRows(current_row, mat.rows()) = mat;
+    current_row += mat.rows();
+  }
+  return stacked_matrix;
+}
+
+Eigen::MatrixXf LaneletConverter::process_segment_to_matrix(
+  const LaneSegment & segment, float center_x, float center_y, float mask_range) const
+{
+  if (
+    segment.polyline.is_empty() || segment.left_boundaries.empty() ||
+    segment.right_boundaries.empty()) {
+    return {};
+  }
+  const auto & centerlines = segment.polyline.waypoints();
+  const auto & left_boundaries = segment.left_boundaries.front().waypoints();
+  const auto & right_boundaries = segment.right_boundaries.front().waypoints();
+  const auto & first_waypoint = segment.polyline.waypoints()[0];
+
+  if (
+    first_waypoint.x() < center_x - mask_range * 1.1f ||
+    first_waypoint.x() > center_x + mask_range * 1.1f ||
+    first_waypoint.y() < center_y - mask_range * 1.1f ||
+    first_waypoint.y() > center_y + mask_range * 1.1f) {
+    return {};
+  }
+
+  const size_t N = centerlines.size();
+  if (left_boundaries.size() != N || right_boundaries.size() != N) {
+    return {};
+  }
+
+  Eigen::MatrixXf segment_data(N, 12);  // 12 = 2 + 2 + 2 + 4 + 1 + 1
+
+  // Encode traffic light as one-hot
+  Eigen::Vector4f traffic_light_vec = Eigen::Vector4f::Zero();
+  switch (segment.traffic_light) {
+    case 1:
+      traffic_light_vec[2] = 1.0f;
+      break;  // RED
+    case 2:
+      traffic_light_vec[1] = 1.0f;
+      break;  // AMBER
+    case 3:
+      traffic_light_vec[0] = 1.0f;
+      break;  // GREEN
+    case 4:
+      traffic_light_vec[3] = 1.0f;
+      break;  // WHITE
+    default:
+      traffic_light_vec[3] = 1.0f;
+      break;  // UNKNOWN
+  }
+
+  // Build each row
+  for (size_t i = 0; i < N; ++i) {
+    segment_data(i, 0) = centerlines[i].x();
+    segment_data(i, 1) = centerlines[i].y();
+    segment_data(i, 2) = left_boundaries[i].x();
+    segment_data(i, 3) = left_boundaries[i].y();
+    segment_data(i, 4) = right_boundaries[i].x();
+    segment_data(i, 5) = right_boundaries[i].y();
+    segment_data.block<1, 4>(i, 6) = traffic_light_vec.transpose();
+    segment_data(i, 10) = segment.speed_limit_mph.value_or(0.0f);
+    segment_data(i, 11) = static_cast<float>(segment.id);
+  }
+
+  return segment_data;
 }
 
 std::optional<PolylineData> LaneletConverter::convert(

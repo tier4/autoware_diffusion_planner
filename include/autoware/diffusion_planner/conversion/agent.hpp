@@ -44,7 +44,6 @@
 namespace autoware::diffusion_planner
 {
 using autoware_perception_msgs::msg::TrackedObject;
-using TransformMatrix = Eigen::Matrix4d;
 
 constexpr size_t AGENT_STATE_DIM = 11;
 
@@ -123,7 +122,7 @@ struct AgentState
   // Return the y velocity.
   [[nodiscard]] float vy() const { return velocity_.y; }
 
-  void apply_transform(const TransformMatrix & transform);
+  void apply_transform(const Eigen::Matrix4f & transform);
 
   [[nodiscard]] std::string to_string() const;
 
@@ -234,7 +233,7 @@ struct AgentHistory
 
   void pad_history(bool pad_front = true);
 
-  void apply_transform(const TransformMatrix & transform)
+  void apply_transform(const Eigen::Matrix4f & transform)
   {
     for (auto & state : queue_) {
       state.apply_transform(transform);
@@ -267,7 +266,7 @@ struct AgentData
     const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t max_num_agent = 32,
     const size_t num_timestamps = 21);
 
-  void apply_transform(const TransformMatrix & transform)
+  void apply_transform(const Eigen::Matrix4f & transform)
   {
     for (auto & history : histories_) {
       history.apply_transform(transform);

@@ -26,6 +26,7 @@
 #include <lanelet2_core/primitives/LineString.h>
 #include <lanelet2_core/utility/Optional.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -40,6 +41,8 @@ using TrafficSignal = autoware_perception_msgs::msg::TrafficLightGroup;
 using TrafficSignalArray = autoware_perception_msgs::msg::TrafficLightGroupArray;
 using TrafficLightIdMap = std::unordered_map<lanelet::Id, TrafficSignal>;
 using autoware_perception_msgs::msg::TrafficLightElement;
+
+constexpr size_t LANE_POINTS = 20;
 
 /**
  * @brief Insert lane points into the container from the end of it.
@@ -241,6 +244,20 @@ public:
    */
   [[nodiscard]] std::vector<LaneSegment> convert_to_lane_segments() const;
 
+  /**
+   * @brief Convert lane segment data to matrix form
+   * @return Eigen::MatrixXf
+   */
+  [[nodiscard]] Eigen::MatrixXf get_map_as_lane_segments(
+    const std::vector<LaneSegment> & lane_segments);
+
+  [[nodiscard]] Eigen::MatrixXf process_segment_to_matrix(
+    const LaneSegment & segment, float center_x, float center_y, float mask_range) const;
+
+  [[nodiscard]] Eigen::MatrixXf process_segments_to_matrix(
+    const std::vector<LaneSegment> & segments, float center_x, float center_y,
+    float mask_range) const;
+
 private:
   /**
    * @brief Convert a linestring to the set of polylines.
@@ -277,6 +294,98 @@ private:
   size_t max_num_point_;                         //!< The max number of points.
   float point_break_distance_;                   //!< Distance threshold to separate two polylines.
 };
+struct RowWithDistance
+{
+  size_t index;
+  float distance_squared;
+};
+// Function to compute squared distances of each matrix of lane segments
+inline void compute_distances(
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
+  std::vector<RowWithDistance> & distances)
+{
+  const size_t n = input_matrix.rows();
+  distances.clear();
+  distances.reserve(n);
+  for (size_t i = 0; i < n; i += LANE_POINTS) {
+    // Directly access input matrix as raw memory
+    float x = input_matrix(i, 0);
+    float y = input_matrix(i, 1);
+    Eigen::Vector4f p(x, y, 0.0f, 1.0f);
+    Eigen::Vector4f p_transformed = transform_matrix * p;
+    float distance_squared = p_transformed.head<2>().squaredNorm();
+    distances.push_back({i, distance_squared});
+  }
+}
+
+inline void sort_indices_by_distance(std::vector<RowWithDistance> & distances)
+{
+  std::sort(distances.begin(), distances.end(), [&](auto & a, auto & b) {
+    return a.distance_squared < b.distance_squared;
+  });
+}
+inline void transform_selected_rows(
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
+  const std::vector<RowWithDistance> & distances, int m, Eigen::MatrixXf & output_matrix)
+{
+  constexpr int kCols = 12;
+  constexpr int kXYPairs = 3;  // First 6 columns = 3 x-y pairs
+
+  const int n_total_segments = static_cast<int>(input_matrix.rows() / LANE_POINTS);
+  const int num_segments = std::min(m, n_total_segments);
+  const int num_rows = num_segments * LANE_POINTS;
+
+  if (input_matrix.cols() < kCols) {
+    throw std::invalid_argument("input_matrix must have at least 12 columns.");
+  }
+
+  output_matrix.resize(num_rows, kCols);
+
+  for (int i = 0; i < num_segments; ++i) {
+    int row_idx = distances[i].index;
+    const auto & segment_block = input_matrix.block<LANE_POINTS, kCols>(row_idx * LANE_POINTS, 0);
+    // Eigen::Block<Eigen::MatrixXf, LANE_POINTS, kCols> output_block =
+    //   output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0);
+
+    for (size_t j = 0; j < LANE_POINTS; ++j) {
+      for (size_t k = 0; k < kXYPairs; ++k) {
+        float x = segment_block(j, 2 * k);
+        float y = segment_block(j, 2 * k + 1);
+        Eigen::Vector4f p(x, y, 0.0f, 1.0f);
+        Eigen::Vector4f p_transformed = transform_matrix * p;
+        output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0)(j, 2 * k) = p_transformed(0);
+        output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0)(j, 2 * k + 1) =
+          p_transformed(1);
+      }
+
+      // Copy the remaining columns unchanged (e.g., columns 6–11)
+      output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0)
+        .row(j)
+        .segment<kCols - 2 * kXYPairs>(2 * kXYPairs) =
+        segment_block.row(j).segment<kCols - 2 * kXYPairs>(2 * kXYPairs);
+    }
+  }
+}
+
+inline void transform_and_select_rows(
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, int m,
+  Eigen::MatrixXf & output_matrix)
+{
+  const int n = input_matrix.rows();
+  if (n == 0 || input_matrix.cols() != 12 || m <= 0) {
+    output_matrix.resize(0, 12);
+    return;
+  }
+  std::vector<RowWithDistance> distances;
+  // Step 1: Compute distances (no memory allocations)
+  compute_distances(input_matrix, transform_matrix, distances);
+  // Step 2: Sort indices by distance (no extra memory)
+  sort_indices_by_distance(distances);
+
+  // Step 3: Apply transformation to selected rows
+  transform_selected_rows(input_matrix, transform_matrix, distances, m, output_matrix);
+}
+
 }  // namespace autoware::diffusion_planner
 
 #endif  // AUTOWARE__DIFFUSION_PLANNER__CONVERSION__LANELET_HPP_
