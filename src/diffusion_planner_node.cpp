@@ -18,6 +18,8 @@
 #include "autoware/diffusion_planner/conversion/ego.hpp"
 #include "onnxruntime_cxx_api.h"
 
+#include <Eigen/src/Core/Matrix.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -80,14 +82,15 @@ void DiffusionPlanner::on_timer()
   auto objects = sub_tracked_objects_.take_data();
   auto ego_kinematic_state = sub_current_odometry_.take_data();
   auto ego_acceleration = sub_current_acceleration_.take_data();
-
+  auto temp_route = route_subscriber_.take_data();
+  route_ptr_ = (!route_ptr_ || temp_route) ? temp_route : route_ptr_;
   if (!is_map_loaded_) {
     RCLCPP_INFO(get_logger(), "Waiting for map data...");
     return;
   }
 
-  if (!objects || !ego_kinematic_state || !ego_acceleration) {
-    RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state data received");
+  if (!objects || !ego_kinematic_state || !ego_acceleration || !route_ptr_) {
+    RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state or route data received");
     return;
   }
 
@@ -174,10 +177,34 @@ void DiffusionPlanner::on_timer()
   auto lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
     mem_info, raw_speed_bool_array.get(), lane_speed_tensor_num_elements,
     lanes_has_speed_limit_shape_.data(), lanes_has_speed_limit_shape_.size());
-  // Ensure the tensor's data is kept alive
+
   auto route_lanes_tensor = Ort::Value::CreateTensor<float>(
     mem_info, route_lanes.data(), route_lanes.size(), route_lanes_shape_.data(),
     route_lanes_shape_.size());
+
+  // TODO(Daniel): move this to a different callback for speed?
+  std::cerr << "Route segments: " << std::endl;
+  std::cerr << "Route segments: " << route_ptr_->segments.size() << std::endl;
+  Eigen::MatrixXf full_route_segment_matrix(
+    NUM_LANE_POINTS * route_ptr_->segments.size(), LANE_MATRIX_DIM);
+  long route_segment_rows = 0;
+  for (const auto & route_segment : route_ptr_->segments) {
+    auto route_segment_row = segment_row_indices_.find(route_segment.preferred_primitive.id);
+    std::cerr << "Route segment is : " << route_segment.preferred_primitive.id << std::endl;
+    std::cerr << "Route segment row in dict: " << route_segment_row->second << std::endl;
+    full_route_segment_matrix.block(route_segment_rows, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM) =
+      map_lane_segments_matrix_.block(
+        route_segment_row->second, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM);
+    route_segment_rows += NUM_LANE_POINTS;
+  }
+
+  std::cerr << "full_route_segment_matrix\n";
+  for (long i = 0; i < full_route_segment_matrix.rows(); ++i) {
+    for (long j = 0; j < full_route_segment_matrix.cols(); ++j) {
+      std::cerr << full_route_segment_matrix(i, j) << " ";
+    }
+    std::cerr << std::endl;
+  }
 
   Ort::Value input_tensors[] = {
     std::move(ego_current_state_tensor), std::move(neighbor_agents_past_tensor),
@@ -221,8 +248,8 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     throw std::runtime_error("No lane segments found in the map");
   }
 
-  map_lane_segments_matrix_ =
-    lanelet_converter_ptr_->process_segments_to_matrix(lane_segments_, 0.0, 0.0, 100000000.0);
+  map_lane_segments_matrix_ = lanelet_converter_ptr_->process_segments_to_matrix(
+    lane_segments_, segment_row_indices_, 0.0, 0.0, 100000000.0);
 
   is_map_loaded_ = true;
   std::cerr << "Lane segments matrix: " << map_lane_segments_matrix_.rows() << "x"

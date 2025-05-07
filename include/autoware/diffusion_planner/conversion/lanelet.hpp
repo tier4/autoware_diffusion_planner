@@ -255,8 +255,8 @@ public:
     const LaneSegment & segment, float center_x, float center_y, float mask_range) const;
 
   [[nodiscard]] Eigen::MatrixXf process_segments_to_matrix(
-    const std::vector<LaneSegment> & segments, float center_x, float center_y,
-    float mask_range) const;
+    const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices,
+    float center_x, float center_y, float mask_range) const;
 
 private:
   /**

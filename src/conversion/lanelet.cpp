@@ -205,11 +205,12 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
 }
 
 [[nodiscard]] Eigen::MatrixXf LaneletConverter::process_segments_to_matrix(
-  const std::vector<LaneSegment> & lane_segments, float center_x, float center_y,
-  float mask_range) const
+  const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices,
+  float center_x, float center_y, float mask_range) const
 {
   std::vector<Eigen::MatrixXf> all_segment_matrices;
-  size_t total_rows = 0;
+
+  long total_rows = 0;
 
   for (const auto & segment : lane_segments) {
     Eigen::MatrixXf segment_matrix =
@@ -228,6 +229,8 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
   long current_row = 0;
   for (const auto & mat : all_segment_matrices) {
     stacked_matrix.middleRows(current_row, mat.rows()) = mat;
+    auto id = static_cast<int64_t>(mat(0, 13));
+    segment_row_indices[id] = current_row;
     current_row += mat.rows();
   }
   return stacked_matrix;
