@@ -42,7 +42,7 @@ using TrafficSignalArray = autoware_perception_msgs::msg::TrafficLightGroupArray
 using TrafficLightIdMap = std::unordered_map<lanelet::Id, TrafficSignal>;
 using autoware_perception_msgs::msg::TrafficLightElement;
 
-constexpr size_t LANE_POINTS = 20;
+constexpr long LANE_POINTS = 20;
 
 /**
  * @brief Insert lane points into the container from the end of it.
@@ -296,7 +296,7 @@ private:
 };
 struct RowWithDistance
 {
-  size_t index;
+  long index;
   float distance_squared;
 };
 // Function to compute squared distances of each matrix of lane segments
@@ -304,10 +304,10 @@ inline void compute_distances(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   std::vector<RowWithDistance> & distances)
 {
-  const size_t n = input_matrix.rows();
+  const auto n = input_matrix.rows();
   distances.clear();
   distances.reserve(n);
-  for (size_t i = 0; i < n; i += LANE_POINTS) {
+  for (long i = 0; i < n; i += LANE_POINTS) {
     // Directly access input matrix as raw memory
     float x = input_matrix(i, 0);
     float y = input_matrix(i, 1);
@@ -324,12 +324,28 @@ inline void sort_indices_by_distance(std::vector<RowWithDistance> & distances)
     return a.distance_squared < b.distance_squared;
   });
 }
-inline void transform_selected_rows(
+
+inline void transform_selected_cols(
+  const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
+  long row_idx, bool do_translation = true)
+{
+  Eigen::Matrix<float, 4, LANE_POINTS> xy_block = Eigen::Matrix<float, 4, LANE_POINTS>::Zero();
+  xy_block.block<2, LANE_POINTS>(0, 0) =
+    output_matrix.block<2, LANE_POINTS>(row_idx, column_idx * LANE_POINTS)
+      .block<2, LANE_POINTS>(0, 0);
+  xy_block.row(3) = do_translation ? Eigen::Matrix<float, 1, LANE_POINTS>::Ones()
+                                   : Eigen::Matrix<float, 1, LANE_POINTS>::Zero();
+
+  Eigen::Matrix<float, 4, LANE_POINTS> transformed_block = transform_matrix * xy_block;
+  output_matrix.block<2, LANE_POINTS>(0, column_idx * LANE_POINTS) =
+    transformed_block.block<2, LANE_POINTS>(0, 0);
+}
+
+inline void transform_xy_points(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   const std::vector<RowWithDistance> & distances, int m, Eigen::MatrixXf & output_matrix)
 {
   constexpr int kCols = 12;
-  constexpr int kXYPairs = 3;  // First 6 columns = 3 x-y pairs
 
   const int n_total_segments = static_cast<int>(input_matrix.rows() / LANE_POINTS);
   const int num_segments = std::min(m, n_total_segments);
@@ -340,31 +356,20 @@ inline void transform_selected_rows(
   }
 
   output_matrix.resize(num_rows, kCols);
+  output_matrix.transposeInPlace();  // helps to simplify the code below
 
-  for (int i = 0; i < num_segments; ++i) {
-    int row_idx = distances[i].index;
-    const auto & segment_block = input_matrix.block<LANE_POINTS, kCols>(row_idx * LANE_POINTS, 0);
-    // Eigen::Block<Eigen::MatrixXf, LANE_POINTS, kCols> output_block =
-    //   output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0);
+  for (auto itr = distances.begin(), end = distances.begin() + num_segments; itr != end; ++itr) {
+    // get the 20 rows corresponding to the segment
+    const auto col_idx = itr->index;
+    output_matrix.block<kCols, LANE_POINTS>(0, col_idx * LANE_POINTS) =
+      input_matrix.block<LANE_POINTS, kCols>(col_idx * LANE_POINTS, 0).transpose();
 
-    for (size_t j = 0; j < LANE_POINTS; ++j) {
-      for (size_t k = 0; k < kXYPairs; ++k) {
-        float x = segment_block(j, 2 * k);
-        float y = segment_block(j, 2 * k + 1);
-        Eigen::Vector4f p(x, y, 0.0f, 1.0f);
-        Eigen::Vector4f p_transformed = transform_matrix * p;
-        output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0)(j, 2 * k) = p_transformed(0);
-        output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0)(j, 2 * k + 1) =
-          p_transformed(1);
-      }
-
-      // Copy the remaining columns unchanged (e.g., columns 6–11)
-      output_matrix.block<LANE_POINTS, kCols>(i * LANE_POINTS, 0)
-        .row(j)
-        .segment<kCols - 2 * kXYPairs>(2 * kXYPairs) =
-        segment_block.row(j).segment<kCols - 2 * kXYPairs>(2 * kXYPairs);
-    }
+    // transform the x and y coordinates
+    transform_selected_cols(transform_matrix, output_matrix, col_idx, 0);
+    transform_selected_cols(transform_matrix, output_matrix, col_idx, 2);
+    transform_selected_cols(transform_matrix, output_matrix, col_idx, 4);
   }
+  output_matrix.transposeInPlace();
 }
 
 inline void transform_and_select_rows(
@@ -377,13 +382,13 @@ inline void transform_and_select_rows(
     return;
   }
   std::vector<RowWithDistance> distances;
-  // Step 1: Compute distances (no memory allocations)
+  // Step 1: Compute distances
   compute_distances(input_matrix, transform_matrix, distances);
-  // Step 2: Sort indices by distance (no extra memory)
+  // Step 2: Sort indices by distance
   sort_indices_by_distance(distances);
 
   // Step 3: Apply transformation to selected rows
-  transform_selected_rows(input_matrix, transform_matrix, distances, m, output_matrix);
+  transform_xy_points(input_matrix, transform_matrix, distances, m, output_matrix);
 }
 
 }  // namespace autoware::diffusion_planner

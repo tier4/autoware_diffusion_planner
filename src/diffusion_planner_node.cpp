@@ -228,19 +228,6 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     }
     std::cerr << std::endl;
   }
-
-  // for (size_t i = 0; i < lane_segments_.size(); ++i) {
-  //   const auto & lane_segment = lane_segments_[i];
-  //   auto m =
-  //     lanelet_converter_ptr_->process_segment_to_vector(lane_segment, 0.0, 100.0, 100000000.0);
-  //   // print the Eigen matrixXf m
-  //   for (long j = 0; j < m.rows(); ++j) {
-  //     for (long k = 0; k < m.cols(); ++k) {
-  //       std::cerr << m(j, k) << " ";
-  //     }
-  //     std::cerr << std::endl;
-  //   }
-  // }
 }
 
 void DiffusionPlanner::on_parameter(
