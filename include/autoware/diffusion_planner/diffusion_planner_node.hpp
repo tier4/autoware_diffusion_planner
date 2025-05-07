@@ -131,6 +131,9 @@ public:
   Ort::AllocatorWithDefaultOptions allocator_;
 
   // Model input shapes
+  static constexpr size_t NUM_LANE_POINTS = 20;
+  static constexpr size_t LANE_POINT_DIM = 12;
+
   const std::vector<long> ego_current_state_shape_ = {1, 10};
   const std::vector<long> neighbor_agents_past_shape_ = {1, 32, 21, 11};
   const std::vector<long> lane_has_speed_limit_shape_ = {1, 70, 1};

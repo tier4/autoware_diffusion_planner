@@ -222,10 +222,10 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
   }
 
   // Now allocate the full matrix
-  const int cols = all_segment_matrices.empty() ? 0 : all_segment_matrices[0].cols();
+  const long cols = all_segment_matrices.empty() ? 0 : all_segment_matrices[0].cols();
   Eigen::MatrixXf stacked_matrix(total_rows, cols);
 
-  size_t current_row = 0;
+  long current_row = 0;
   for (const auto & mat : all_segment_matrices) {
     stacked_matrix.middleRows(current_row, mat.rows()) = mat;
     current_row += mat.rows();
@@ -282,11 +282,13 @@ Eigen::MatrixXf LaneletConverter::process_segment_to_matrix(
   }
 
   // Build each row
-  for (size_t i = 0; i < N; ++i) {
+  for (long i = 0; i < static_cast<long>(N); ++i) {
     segment_data(i, 0) = centerlines[i].x();
     segment_data(i, 1) = centerlines[i].y();
-    segment_data(i, 2) = i < N - 1 ? centerlines[i + 1].x() - centerlines[i].x() : 0.0f;
-    segment_data(i, 3) = i < N - 1 ? centerlines[i + 1].y() - centerlines[i].y() : 0.0f;
+    segment_data(i, 2) =
+      i < static_cast<long>(N) - 1 ? centerlines[i + 1].x() - centerlines[i].x() : 0.0f;
+    segment_data(i, 3) =
+      i < static_cast<long>(N) - 1 ? centerlines[i + 1].y() - centerlines[i].y() : 0.0f;
     segment_data(i, 4) = left_boundaries[i].x();
     segment_data(i, 5) = left_boundaries[i].y();
     segment_data(i, 6) = right_boundaries[i].x();
