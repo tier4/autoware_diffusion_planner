@@ -309,6 +309,9 @@ struct AgentData
   // Return the address pointer of data array.
   const float * data_ptr() const noexcept { return data_.data(); }
 
+  // Copy the data to a vector
+  std::vector<float> as_vector() const noexcept { return data_; }
+
 private:
   std::vector<AgentHistory> histories_;
   std::unordered_map<std::string, size_t> histories_idx_map_;
