@@ -331,64 +331,66 @@ inline void transform_selected_cols(
 {
   Eigen::Matrix<float, 4, LANE_POINTS> xy_block = Eigen::Matrix<float, 4, LANE_POINTS>::Zero();
   xy_block.block<2, LANE_POINTS>(0, 0) =
-    output_matrix.block<2, LANE_POINTS>(row_idx, column_idx * LANE_POINTS)
-      .block<2, LANE_POINTS>(0, 0);
+    output_matrix.block<2, LANE_POINTS>(row_idx, column_idx * LANE_POINTS);
   xy_block.row(3) = do_translation ? Eigen::Matrix<float, 1, LANE_POINTS>::Ones()
                                    : Eigen::Matrix<float, 1, LANE_POINTS>::Zero();
 
   Eigen::Matrix<float, 4, LANE_POINTS> transformed_block = transform_matrix * xy_block;
-  output_matrix.block<2, LANE_POINTS>(0, column_idx * LANE_POINTS) =
+  output_matrix.block<2, LANE_POINTS>(row_idx, column_idx * LANE_POINTS) =
     transformed_block.block<2, LANE_POINTS>(0, 0);
 }
 
-inline void transform_xy_points(
+inline Eigen::MatrixXf transform_xy_points(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  const std::vector<RowWithDistance> & distances, int m, Eigen::MatrixXf & output_matrix)
+  const std::vector<RowWithDistance> & distances, long m)
 {
   constexpr int kCols = 12;
 
-  const int n_total_segments = static_cast<int>(input_matrix.rows() / LANE_POINTS);
-  const int num_segments = std::min(m, n_total_segments);
-  const int num_rows = num_segments * LANE_POINTS;
+  const long n_total_segments = static_cast<int>(input_matrix.rows() / LANE_POINTS);
+  const long num_segments = std::min(m, n_total_segments);
+  const long num_rows = num_segments * LANE_POINTS;
 
   if (input_matrix.cols() < kCols) {
     throw std::invalid_argument("input_matrix must have at least 12 columns.");
   }
 
-  output_matrix.resize(num_rows, kCols);
+  Eigen::MatrixXf output_matrix(num_rows, kCols);
+  output_matrix.setZero();
   output_matrix.transposeInPlace();  // helps to simplify the code below
 
+  long col_counter = 0;
   for (auto itr = distances.begin(), end = distances.begin() + num_segments; itr != end; ++itr) {
     // get the 20 rows corresponding to the segment
-    const auto col_idx = itr->index;
-    output_matrix.block<kCols, LANE_POINTS>(0, col_idx * LANE_POINTS) =
-      input_matrix.block<LANE_POINTS, kCols>(col_idx * LANE_POINTS, 0).transpose();
+    const auto row_idx = itr->index;
+
+    output_matrix.block<kCols, LANE_POINTS>(0, col_counter * LANE_POINTS) =
+      input_matrix.block<LANE_POINTS, kCols>(row_idx, 0).transpose();
 
     // transform the x and y coordinates
-    transform_selected_cols(transform_matrix, output_matrix, col_idx, 0);
-    transform_selected_cols(transform_matrix, output_matrix, col_idx, 2);
-    transform_selected_cols(transform_matrix, output_matrix, col_idx, 4);
+    transform_selected_cols(transform_matrix, output_matrix, col_counter, 0);
+    transform_selected_cols(transform_matrix, output_matrix, col_counter, 2);
+    transform_selected_cols(transform_matrix, output_matrix, col_counter, 4);
+    col_counter++;
   }
-  output_matrix.transposeInPlace();
+  return output_matrix.transpose();
 }
 
-inline void transform_and_select_rows(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, int m,
-  Eigen::MatrixXf & output_matrix)
+inline Eigen::MatrixXf transform_and_select_rows(
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, int m)
 {
-  const int n = input_matrix.rows();
+  const auto n = input_matrix.rows();
   if (n == 0 || input_matrix.cols() != 12 || m <= 0) {
-    output_matrix.resize(0, 12);
-    return;
+    throw std::invalid_argument(
+      "Input matrix must have at least 12 columns and m must be greater than 0.");
+    return {};
   }
   std::vector<RowWithDistance> distances;
   // Step 1: Compute distances
   compute_distances(input_matrix, transform_matrix, distances);
   // Step 2: Sort indices by distance
   sort_indices_by_distance(distances);
-
   // Step 3: Apply transformation to selected rows
-  transform_xy_points(input_matrix, transform_matrix, distances, m, output_matrix);
+  return transform_xy_points(input_matrix, transform_matrix, distances, m);
 }
 
 }  // namespace autoware::diffusion_planner
