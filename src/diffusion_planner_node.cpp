@@ -117,7 +117,7 @@ void DiffusionPlanner::on_timer()
   std::cerr << "Agent Data: " << ego_centric_data.to_string() << std::endl;
 
   Eigen::MatrixXf ego_centric_lane_segments =
-    transform_and_select_rows(map_lane_segments_matrix_, map_to_ego_transform, 70);
+    transform_and_select_rows(map_lane_segments_matrix_, map_to_ego_transform, lanes_shape_[1]);
 
   std::cerr << "Ego centric Lane segments matrix: " << ego_centric_lane_segments.rows() << "x"
             << ego_centric_lane_segments.cols() << std::endl;

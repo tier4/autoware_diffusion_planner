@@ -372,7 +372,7 @@ inline Eigen::MatrixXf transform_xy_points(
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 2, false);
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 4);
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 6);
-    col_counter++;
+    ++col_counter;
   }
   return output_matrix.transpose();
 }
