@@ -344,17 +344,16 @@ inline Eigen::MatrixXf transform_xy_points(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   const std::vector<RowWithDistance> & distances, long m)
 {
-  constexpr int kCols = 14;
-
-  const long n_total_segments = static_cast<int>(input_matrix.rows() / LANE_POINTS);
+  constexpr long n_columns = 14;
+  const long n_total_segments = static_cast<long>(input_matrix.rows() / LANE_POINTS);
   const long num_segments = std::min(m, n_total_segments);
   const long num_rows = num_segments * LANE_POINTS;
 
-  if (input_matrix.cols() < kCols) {
+  if (input_matrix.cols() < n_columns) {
     throw std::invalid_argument("input_matrix must have at least 14 columns.");
   }
 
-  Eigen::MatrixXf output_matrix(num_rows, kCols);
+  Eigen::MatrixXf output_matrix(num_rows, n_columns);
   output_matrix.setZero();
   output_matrix.transposeInPlace();  // helps to simplify the code below
 
@@ -363,8 +362,8 @@ inline Eigen::MatrixXf transform_xy_points(
     // get the 20 rows corresponding to the segment
     const auto row_idx = itr->index;
 
-    output_matrix.block<kCols, LANE_POINTS>(0, col_counter * LANE_POINTS) =
-      input_matrix.block<LANE_POINTS, kCols>(row_idx, 0).transpose();
+    output_matrix.block<n_columns, LANE_POINTS>(0, col_counter * LANE_POINTS) =
+      input_matrix.block<LANE_POINTS, n_columns>(row_idx, 0).transpose();
 
     // transform the x and y coordinates
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 0);
@@ -378,7 +377,7 @@ inline Eigen::MatrixXf transform_xy_points(
 }
 
 inline Eigen::MatrixXf transform_and_select_rows(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, int m)
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, long m)
 {
   const auto n = input_matrix.rows();
   if (n == 0 || input_matrix.cols() != 14 || m <= 0) {
