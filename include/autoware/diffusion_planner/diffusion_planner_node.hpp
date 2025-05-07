@@ -131,14 +131,14 @@ public:
   Ort::AllocatorWithDefaultOptions allocator_;
 
   // Model input shapes
-  const std::vector<int64_t> ego_current_state_shape_ = {1, 10};
-  const std::vector<int64_t> neighbor_agents_past_shape_ = {1, 32, 21, 11};
-  const std::vector<int64_t> lane_has_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<int64_t> static_objects_shape_ = {1, 5, 10};
-  const std::vector<int64_t> lanes_shape_ = {1, 70, 20, 12};
-  const std::vector<int64_t> lanes_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<int64_t> lanes_has_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<int64_t> route_lanes_shape_ = {1, 25, 20, 12};
+  const std::vector<long> ego_current_state_shape_ = {1, 10};
+  const std::vector<long> neighbor_agents_past_shape_ = {1, 32, 21, 11};
+  const std::vector<long> lane_has_speed_limit_shape_ = {1, 70, 1};
+  const std::vector<long> static_objects_shape_ = {1, 5, 10};
+  const std::vector<long> lanes_shape_ = {1, 70, 20, 12};
+  const std::vector<long> lanes_speed_limit_shape_ = {1, 70, 1};
+  const std::vector<long> lanes_has_speed_limit_shape_ = {1, 70, 1};
+  const std::vector<long> route_lanes_shape_ = {1, 25, 20, 12};
 
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};

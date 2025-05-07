@@ -344,14 +344,14 @@ inline Eigen::MatrixXf transform_xy_points(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   const std::vector<RowWithDistance> & distances, long m)
 {
-  constexpr int kCols = 12;
+  constexpr int kCols = 14;
 
   const long n_total_segments = static_cast<int>(input_matrix.rows() / LANE_POINTS);
   const long num_segments = std::min(m, n_total_segments);
   const long num_rows = num_segments * LANE_POINTS;
 
   if (input_matrix.cols() < kCols) {
-    throw std::invalid_argument("input_matrix must have at least 12 columns.");
+    throw std::invalid_argument("input_matrix must have at least 14 columns.");
   }
 
   Eigen::MatrixXf output_matrix(num_rows, kCols);
@@ -368,8 +368,10 @@ inline Eigen::MatrixXf transform_xy_points(
 
     // transform the x and y coordinates
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 0);
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, 2);
+    // the dx and dy coordinates do not require translation
+    transform_selected_cols(transform_matrix, output_matrix, col_counter, 2, false);
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 4);
+    transform_selected_cols(transform_matrix, output_matrix, col_counter, 6);
     col_counter++;
   }
   return output_matrix.transpose();
@@ -379,9 +381,9 @@ inline Eigen::MatrixXf transform_and_select_rows(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, int m)
 {
   const auto n = input_matrix.rows();
-  if (n == 0 || input_matrix.cols() != 12 || m <= 0) {
+  if (n == 0 || input_matrix.cols() != 14 || m <= 0) {
     throw std::invalid_argument(
-      "Input matrix must have at least 12 columns and m must be greater than 0.");
+      "Input matrix must have at least 14 columns and m must be greater than 0.");
     return {};
   }
   std::vector<RowWithDistance> distances;

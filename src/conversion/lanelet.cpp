@@ -259,7 +259,7 @@ Eigen::MatrixXf LaneletConverter::process_segment_to_matrix(
     return {};
   }
 
-  Eigen::MatrixXf segment_data(N, 12);  // 12 = 2 + 2 + 2 + 4 + 1 + 1
+  Eigen::MatrixXf segment_data(N, 14);  // 14 = 2 + 2 + 2 + 2 + 4 + 1 + 1
 
   // Encode traffic light as one-hot
   Eigen::Vector4f traffic_light_vec = Eigen::Vector4f::Zero();
@@ -285,13 +285,15 @@ Eigen::MatrixXf LaneletConverter::process_segment_to_matrix(
   for (size_t i = 0; i < N; ++i) {
     segment_data(i, 0) = centerlines[i].x();
     segment_data(i, 1) = centerlines[i].y();
-    segment_data(i, 2) = left_boundaries[i].x();
-    segment_data(i, 3) = left_boundaries[i].y();
-    segment_data(i, 4) = right_boundaries[i].x();
-    segment_data(i, 5) = right_boundaries[i].y();
-    segment_data.block<1, 4>(i, 6) = traffic_light_vec.transpose();
-    segment_data(i, 10) = segment.speed_limit_mph.value_or(0.0f);
-    segment_data(i, 11) = static_cast<float>(segment.id);
+    segment_data(i, 2) = i < N - 1 ? centerlines[i + 1].x() - centerlines[i].x() : 0.0f;
+    segment_data(i, 3) = i < N - 1 ? centerlines[i + 1].y() - centerlines[i].y() : 0.0f;
+    segment_data(i, 4) = left_boundaries[i].x();
+    segment_data(i, 5) = left_boundaries[i].y();
+    segment_data(i, 6) = right_boundaries[i].x();
+    segment_data(i, 7) = right_boundaries[i].y();
+    segment_data.block<1, 4>(i, 8) = traffic_light_vec.transpose();
+    segment_data(i, 12) = segment.speed_limit_mph.value_or(0.0f);
+    segment_data(i, 13) = static_cast<float>(segment.id);
   }
 
   return segment_data;
