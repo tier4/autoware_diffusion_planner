@@ -119,45 +119,14 @@ void DiffusionPlanner::on_timer()
   Eigen::MatrixXf ego_centric_lane_segments =
     transform_and_select_rows(map_lane_segments_matrix_, map_to_ego_transform, lanes_shape_[1]);
 
-  std::cerr << "FULL Ego centric Lane segments matrix: " << ego_centric_lane_segments.rows() << "x"
-            << ego_centric_lane_segments.cols() << std::endl;
-
-  for (long i = 0; i < ego_centric_lane_segments.rows(); ++i) {
-    for (long j = 0; j < ego_centric_lane_segments.cols(); ++j) {
-      std::cerr << ego_centric_lane_segments(i, j) << " ";
-    }
-    std::cerr << std::endl;
-  }
-
   const auto total_lane_points = lanes_speed_limit_shape_[1] * NUM_LANE_POINTS;
 
   Eigen::MatrixXf lane_segments_matrix(total_lane_points, LANE_POINT_DIM);
   lane_segments_matrix.block(0, 0, total_lane_points, LANE_POINT_DIM) =
     ego_centric_lane_segments.block(0, 0, total_lane_points, LANE_POINT_DIM);
-
-  std::cerr << "Ego centric Lane segments matrix: " << lane_segments_matrix.rows() << "x"
-            << lane_segments_matrix.cols() << std::endl;
-
-  for (long i = 0; i < lane_segments_matrix.rows(); ++i) {
-    for (long j = 0; j < lane_segments_matrix.cols(); ++j) {
-      std::cerr << lane_segments_matrix(i, j) << " ";
-    }
-    std::cerr << std::endl;
-  }
-
   Eigen::MatrixXf lane_segments_speed(total_lane_points, lanes_speed_limit_shape_[2]);
   lane_segments_speed.block(0, 0, total_lane_points, lanes_speed_limit_shape_[2]) =
     ego_centric_lane_segments.block(0, 12, total_lane_points, lanes_speed_limit_shape_[2]);
-
-  std::cerr << "Ego centric Lane velocity matrix: " << lane_segments_speed.rows() << "x"
-            << lane_segments_speed.cols() << std::endl;
-
-  for (long i = 0; i < lane_segments_speed.rows(); ++i) {
-    for (long j = 0; j < lane_segments_speed.cols(); ++j) {
-      std::cerr << lane_segments_speed(i, j) << " ";
-    }
-    std::cerr << std::endl;
-  }
 
   // Prepare input data for the model
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
