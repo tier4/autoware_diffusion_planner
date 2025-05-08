@@ -36,6 +36,7 @@
 #include <autoware_perception_msgs/msg/detail/tracked_objects__struct.hpp>
 #include <autoware_perception_msgs/msg/tracked_objects.hpp>
 #include <autoware_perception_msgs/msg/traffic_signal.hpp>
+#include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
 
@@ -58,6 +59,7 @@ using autoware_map_msgs::msg::LaneletMapBin;
 using autoware_perception_msgs::msg::TrackedObjects;
 using autoware_planning_msgs::msg::LaneletRoute;
 using autoware_planning_msgs::msg::Trajectory;
+using autoware_planning_msgs::msg::TrajectoryPoint;
 using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
@@ -129,6 +131,9 @@ public:
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
   void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
   void load_model(const std::string & model_path);
+
+  // preprocessing
+  std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
   std::vector<float> extract_ego_centric_lane_segments(
@@ -138,6 +143,25 @@ public:
 
   InputDataMap create_input_data();
   void normalize_input_data(InputDataMap & input_data_map);
+
+  // postprocessing
+  Trajectory create_trajectory(
+    std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map);
+
+  inline void transform_output_matrix(
+    const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
+    long row_idx, bool do_translation = true)
+  {
+    Eigen::Matrix<float, 4, OUTPUT_T> xy_block = Eigen::Matrix<float, 4, OUTPUT_T>::Zero();
+    xy_block.block<2, OUTPUT_T>(0, 0) =
+      output_matrix.block<2, OUTPUT_T>(row_idx, column_idx * OUTPUT_T);
+    xy_block.row(3) = do_translation ? Eigen::Matrix<float, 1, OUTPUT_T>::Ones()
+                                     : Eigen::Matrix<float, 1, OUTPUT_T>::Zero();
+
+    Eigen::Matrix<float, 4, OUTPUT_T> transformed_block = transform_matrix * xy_block;
+    output_matrix.block<2, OUTPUT_T>(row_idx, column_idx * OUTPUT_T) =
+      transformed_block.block<2, OUTPUT_T>(0, 0);
+  };
 
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
@@ -150,6 +174,7 @@ public:
   static constexpr long NUM_LANE_POINTS = 20;
   static constexpr long LANE_POINT_DIM = 12;
   static constexpr long LANE_MATRIX_DIM = 14;
+  static constexpr long OUTPUT_T = 80;
 
   const std::vector<long> ego_current_state_shape_ = {1, 10};
   const std::vector<long> neighbor_agents_past_shape_ = {1, 32, 21, 11};
@@ -160,6 +185,8 @@ public:
   const std::vector<long> lanes_has_speed_limit_shape_ = {1, 70, 1};
   const std::vector<long> route_lanes_shape_ = {1, 25, 20, 12};
 
+  // Model output shape
+  const std::vector<long> output_shape_ = {1, 11, 80, 4};
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};
 
