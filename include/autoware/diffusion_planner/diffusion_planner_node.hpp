@@ -20,6 +20,8 @@
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
+#include "builtin_interfaces/msg/duration.hpp"
+#include "builtin_interfaces/msg/time.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #include <Eigen/Dense>
@@ -30,7 +32,11 @@
 #include <rclcpp/timer.hpp>
 
 #include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/point.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "std_msgs/msg/color_rgba.hpp"
+#include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 #include <autoware_map_msgs/msg/detail/lanelet_map_bin__struct.hpp>
 #include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
 #include <autoware_perception_msgs/msg/detail/tracked_objects__struct.hpp>
@@ -64,6 +70,12 @@ using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
 using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
+using builtin_interfaces::msg::Duration;
+using builtin_interfaces::msg::Time;
+using geometry_msgs::msg::Point;
+using std_msgs::msg::ColorRGBA;
+using visualization_msgs::msg::Marker;
+using visualization_msgs::msg::MarkerArray;
 
 std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
   const nav_msgs::msg::Odometry & msg)
@@ -148,6 +160,11 @@ public:
   Trajectory create_trajectory(
     std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map);
 
+  // debugging
+  MarkerArray create_route_marker(
+    const std::vector<float> & route_vector, const std::vector<long> & shape, const Time & stamp,
+    const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f}, std::string ns = "base_link");
+
   inline void transform_output_matrix(
     const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
     long row_idx, bool do_translation = true)
@@ -211,6 +228,8 @@ public:
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
   rclcpp::Publisher<Trajectory>::SharedPtr pub_trajectory_{nullptr};
+  rclcpp::Publisher<MarkerArray>::SharedPtr pub_lane_marker_{nullptr};
+  rclcpp::Publisher<MarkerArray>::SharedPtr pub_route_marker_{nullptr};
   mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
   autoware_utils::InterProcessPollingSubscriber<Odometry> sub_current_odometry_{
     this, "~/input/odometry"};
