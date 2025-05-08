@@ -18,6 +18,8 @@
 #include "autoware/diffusion_planner/conversion/ego.hpp"
 #include "onnxruntime_cxx_api.h"
 
+#include <autoware_utils/math/normalization.hpp>
+
 #include <Eigen/src/Core/Matrix.h>
 
 #include <cassert>
@@ -210,9 +212,8 @@ InputDataMap DiffusionPlanner::create_input_data()
   input_data_map["ego_current_state"] = ego_state.as_array();
 
   // Agent data on ego reference frame
-  std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms =
-    get_transform_matrix(*ego_kinematic_state);
-  auto map_to_ego_transform = transforms.second;
+  transforms_ = get_transform_matrix(*ego_kinematic_state);
+  auto map_to_ego_transform = transforms_.second;
   auto ego_centric_data = get_ego_centric_agent_data(*objects, map_to_ego_transform);
   input_data_map["neighbor_agents_past"] = ego_centric_data.as_vector();
 
@@ -226,7 +227,6 @@ InputDataMap DiffusionPlanner::create_input_data()
     transform_and_select_rows(map_lane_segments_matrix_, map_to_ego_transform, lanes_shape_[1]);
   auto lane_data = extract_ego_centric_lane_segments(ego_centric_lane_segments);
   input_data_map["lanes"] = lane_data;
-
   auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
   input_data_map["lanes_speed_limit"] = lane_speed_data;
 
@@ -237,6 +237,72 @@ InputDataMap DiffusionPlanner::create_input_data()
   // normalization of data
   normalize_input_data(input_data_map);
   return input_data_map;
+}
+
+Trajectory DiffusionPlanner::create_trajectory(
+  std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map)
+{
+  Trajectory trajectory;
+  trajectory.header.stamp = this->now();
+  trajectory.header.frame_id = "map";
+  // one batch of predictions
+  // TODO(Daniel): add batch support
+  auto data = predictions[0].GetTensorMutableData<float>();
+  const auto prediction_shape = predictions[0].GetTensorTypeAndShapeInfo().GetShape();
+  const auto num_of_dimensions = prediction_shape.size();
+  for (auto & dim : prediction_shape) {
+    std::cerr << "Prediction shape: " << dim << " ";
+  }
+  std::cerr << std::endl;
+  // const auto num_points_in_one_mode =
+  //   prediction_shape[num_of_dimensions - 1] * prediction_shape[num_of_dimensions - 2];
+  // copy relevant part of data to Eigen matrix
+  auto rows = prediction_shape[num_of_dimensions - 2];
+  auto cols = prediction_shape[num_of_dimensions - 1];
+
+  Eigen::MatrixXf prediction_matrix(rows, cols);
+
+  // Fill matrix row-wise from data using Eigen::Map
+  Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> mapped_data(
+    data, rows, cols);
+
+  // Copy only the relevant part
+  prediction_matrix = mapped_data;  // Copies first rows*cols elements row-wise
+
+  prediction_matrix.transposeInPlace();
+  transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
+  transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+  prediction_matrix.transposeInPlace();
+
+  constexpr float dt = 0.1f;
+  float prev_x = 0.f;
+  float prev_y = 0.f;
+  for (long row = 0; row < prediction_matrix.rows(); ++row) {
+    TrajectoryPoint p;
+    p.pose.position.x = prediction_matrix(row, 0);
+    p.pose.position.y = prediction_matrix(row, 1);
+    p.pose.position.z = 0.0;
+    auto yaw = std::atan2(prediction_matrix(row, 3), prediction_matrix(row, 2));
+    yaw = static_cast<float>(autoware_utils::normalize_radian(yaw));
+    p.pose.orientation = autoware_utils::create_quaternion_from_yaw(yaw);
+    auto distance = std::hypotf(p.pose.position.x - prev_x, p.pose.position.y - prev_y);
+    p.longitudinal_velocity_mps = distance / dt;
+
+    prev_x = p.pose.position.x;
+    prev_y = p.pose.position.y;
+    trajectory.points.push_back(p);
+  }
+
+  // print matrix for debugging
+  std::cerr << "Prediction matrix:\n";
+  for (long i = 0; i < prediction_matrix.rows(); ++i) {
+    for (long j = 0; j < prediction_matrix.cols(); ++j) {
+      std::cerr << prediction_matrix(i, j) << " ";
+    }
+    std::cerr << std::endl;
+  }
+
+  return trajectory;
 }
 
 void DiffusionPlanner::on_timer()
@@ -268,7 +334,7 @@ void DiffusionPlanner::on_timer()
     std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
 
   for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
-    raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > 0.0f);
+    raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
   }
 
   auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
@@ -308,12 +374,9 @@ void DiffusionPlanner::on_timer()
   try {
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
-    std::cout << "Inference ran successfully, got " << output.size() << " outputs." << std::endl;
-    auto data = output[0].GetTensorMutableData<float>();
-    std::cout << "Output data: " << output[0].GetTensorTypeAndShapeInfo().GetElementCount() << "\n";
-    for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
-      std::cout << data[i] << " ";
-    }
+
+    auto output_trajectory = create_trajectory(output, transforms_.first);
+    pub_trajectory_->publish(output_trajectory);
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
   }
