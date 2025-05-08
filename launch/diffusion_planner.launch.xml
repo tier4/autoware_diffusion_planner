@@ -2,6 +2,7 @@
 <launch>
   <arg name="diffusion_planner_param_path" default="$(find-pkg-share autoware_diffusion_planner)/config/diffusion_planner.param.yaml"/>
   <arg name="onnx_model_path" default="$(env HOME)/pilot-auto-new-framework/src/autoware/trajectory_generator/autoware_diffusion_planner/data/model.onnx"/>
+  <arg name="args_path" default="$(env HOME)/pilot-auto-new-framework/src/autoware/trajectory_generator/autoware_diffusion_planner/data/args.json"/>
   <arg name="input/vector_map" default="/map/vector_map"/>
 
   <node pkg="autoware_diffusion_planner" exec="autoware_diffusion_planner_node" name="diffusion_planner_node" output="screen">
@@ -14,5 +15,6 @@
     <remap from="~/input/tracked_objects" to="/perception/object_recognition/tracking/objects"/>
     <remap from="~/input/vector_map" to="$(var input/vector_map)"/>
     <param name="onnx_model_path" value="$(var onnx_model_path)"/>
+    <param name="args_path" value="$(var args_path)"/>
   </node>
 </launch>
