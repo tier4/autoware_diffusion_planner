@@ -279,6 +279,7 @@ struct AgentData
 
   void update_histories(const autoware_perception_msgs::msg::TrackedObjects & objects);
 
+  void trim_to_k_closest_agents();
   void trim_to_k_closest_agents(const geometry_msgs::msg::Point & position);
   // Return the number of classes `C`.
   static size_t num_class() { return 3; }

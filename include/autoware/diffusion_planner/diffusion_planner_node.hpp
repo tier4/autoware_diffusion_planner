@@ -17,6 +17,7 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
+#include "autoware/diffusion_planner/utils/arg_reader.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -38,6 +39,7 @@
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
 
+#include <Eigen/src/Core/Matrix.h>
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_routing/RoutingGraph.h>
 #include <lanelet2_traffic_rules/TrafficRules.h>
@@ -45,6 +47,9 @@
 
 #include <memory>
 #include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace autoware::diffusion_planner
 {
@@ -56,6 +61,7 @@ using autoware_planning_msgs::msg::Trajectory;
 using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
+using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
 
 std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
   const nav_msgs::msg::Odometry & msg)
@@ -97,6 +103,7 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
 struct DiffusionPlannerParams
 {
   std::string model_path;
+  std::string args_path;
   double planning_frequency_hz;
 };
 struct DiffusionPlannerDebugParams
@@ -122,6 +129,15 @@ public:
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
   void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
   void load_model(const std::string & model_path);
+  AgentData get_ego_centric_agent_data(
+    const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
+  std::vector<float> extract_ego_centric_lane_segments(
+    const Eigen::MatrixXf & ego_centric_lane_segments);
+  std::vector<float> extract_lane_speeds(const Eigen::MatrixXf & ego_centric_lane_segments);
+  std::vector<float> get_route_segments(const Eigen::Matrix4f & map_to_ego_transform);
+
+  InputDataMap create_input_data();
+  void normalize_input_data(InputDataMap & input_data_map);
 
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
@@ -131,9 +147,9 @@ public:
   Ort::AllocatorWithDefaultOptions allocator_;
 
   // Model input shapes
-  static constexpr size_t NUM_LANE_POINTS = 20;
-  static constexpr size_t LANE_POINT_DIM = 12;
-  static constexpr size_t LANE_MATRIX_DIM = 14;
+  static constexpr long NUM_LANE_POINTS = 20;
+  static constexpr long LANE_POINT_DIM = 12;
+  static constexpr long LANE_MATRIX_DIM = 14;
 
   const std::vector<long> ego_current_state_shape_ = {1, 10};
   const std::vector<long> neighbor_agents_past_shape_ = {1, 32, 21, 11};
@@ -150,6 +166,7 @@ public:
   // Node parameters
   DiffusionPlannerParams params_;
   DiffusionPlannerDebugParams debug_params_;
+  NormalizationMap normalization_map_;
 
   // Lanelet map
   LaneletRoute::ConstSharedPtr route_ptr_;

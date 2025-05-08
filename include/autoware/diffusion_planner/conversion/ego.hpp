@@ -49,7 +49,7 @@ struct EgoState
   float steering_angle_{0.0f};
   float yaw_rate_{0.0f};
 
-  std::array<float, EGO_STATE_DIM> data_;
+  std::vector<float> data_;
   static constexpr float MAX_YAW_RATE = 0.95f;
   static constexpr float MAX_STEER_ANGLE = static_cast<float>((2.0 / 3.0) * M_PI);
 
@@ -58,7 +58,7 @@ struct EgoState
     const geometry_msgs::msg::AccelWithCovarianceStamped & acceleration_msg, float wheel_base);
   [[nodiscard]] std::string to_string() const;
 
-  [[nodiscard]] std::array<float, EGO_STATE_DIM> as_array() const noexcept { return data_; }
+  [[nodiscard]] std::vector<float> as_array() const noexcept { return data_; }
   [[nodiscard]] const float * data_ptr() const noexcept { return data_.data(); }
   [[nodiscard]] float x() const noexcept { return x_; }
   [[nodiscard]] float y() const noexcept { return y_; }

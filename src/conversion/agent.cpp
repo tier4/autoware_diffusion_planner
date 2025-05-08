@@ -256,6 +256,15 @@ void AgentData::update_histories(const autoware_perception_msgs::msg::TrackedObj
   fill_data(histories_);
 }
 
+void AgentData::trim_to_k_closest_agents()
+{
+  geometry_msgs::msg::Point position;
+  position.x = 0.0;
+  position.y = 0.0;
+  position.z = 0.0;
+  trim_to_k_closest_agents(position);
+}
+
 void AgentData::trim_to_k_closest_agents(const geometry_msgs::msg::Point & position)
 {
   std::sort(
