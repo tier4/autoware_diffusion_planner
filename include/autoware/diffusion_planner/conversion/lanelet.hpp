@@ -149,15 +149,14 @@ inline bool isRoadwayLike(const lanelet::Optional<std::string> & subtype)
 inline bool isBoundaryLike(const lanelet::ConstLineString3d & linestring)
 {
   const auto type = toTypeName(linestring);
-  const auto subtype = toSubtypeName(linestring);
-  if (!type || !subtype) {
+  if (!type) {
     return false;
   }
 
   const auto & type_str = type.value();
-  const auto & subtype_str = subtype.value();
-  return (type_str == "line_thin" || type_str == "line_thick" || type_str == "road_boarder") &&
-         subtype_str != "virtual";
+  return (
+    type_str == "line_thin" || type_str == "line_thick" || type_str == "road_boarder" ||
+    type_str == "virtual");
 }
 
 /**
@@ -347,13 +346,12 @@ inline Eigen::MatrixXf transform_xy_points(
   constexpr long n_columns = 14;
   const long n_total_segments = static_cast<long>(input_matrix.rows() / LANE_POINTS);
   const long num_segments = std::min(m, n_total_segments);
-  const long num_rows = num_segments * LANE_POINTS;
 
   if (input_matrix.cols() < n_columns) {
     throw std::invalid_argument("input_matrix must have at least 14 columns.");
   }
 
-  Eigen::MatrixXf output_matrix(num_rows, n_columns);
+  Eigen::MatrixXf output_matrix(m * LANE_POINTS, n_columns);
   output_matrix.setZero();
   output_matrix.transposeInPlace();  // helps to simplify the code below
 

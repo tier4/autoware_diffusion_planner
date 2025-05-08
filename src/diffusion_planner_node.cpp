@@ -131,6 +131,35 @@ void DiffusionPlanner::on_timer()
   lane_segments_speed.block(0, 0, total_lane_points, lanes_speed_limit_shape_[2]) =
     ego_centric_lane_segments.block(0, 12, total_lane_points, lanes_speed_limit_shape_[2]);
 
+  // TODO(Daniel): move this to a different callback for speed?
+  std::cerr << "Route segments: " << std::endl;
+  std::cerr << "Route segments: " << route_ptr_->segments.size() << std::endl;
+  Eigen::MatrixXf full_route_segment_matrix(
+    NUM_LANE_POINTS * route_ptr_->segments.size(), LANE_MATRIX_DIM);
+  long route_segment_rows = 0;
+  for (const auto & route_segment : route_ptr_->segments) {
+    auto route_segment_row = segment_row_indices_[route_segment.preferred_primitive.id];
+    full_route_segment_matrix.block(route_segment_rows, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM) =
+      map_lane_segments_matrix_.block(route_segment_row, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM);
+    route_segment_rows += NUM_LANE_POINTS;
+  }
+
+  Eigen::MatrixXf ego_centric_route_segments = transform_and_select_rows(
+    full_route_segment_matrix, map_to_ego_transform, route_lanes_shape_[1]);
+
+  std::cerr << " ego_centric_route_segments\n";
+  for (long i = 0; i < ego_centric_route_segments.rows(); ++i) {
+    for (long j = 0; j < ego_centric_route_segments.cols(); ++j) {
+      std::cerr << ego_centric_route_segments(i, j) << " ";
+    }
+    std::cerr << std::endl;
+  }
+
+  const auto total_route_points = route_lanes_shape_[1] * NUM_LANE_POINTS;
+  Eigen::MatrixXf route_segments_matrix(total_route_points, LANE_POINT_DIM);
+  route_segments_matrix.block(0, 0, total_route_points, LANE_POINT_DIM) =
+    ego_centric_route_segments.block(0, 0, total_route_points, LANE_POINT_DIM);
+
   // Prepare input data for the model
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   Ort::Allocator cuda_allocator(session_, mem_info);
@@ -141,7 +170,17 @@ void DiffusionPlanner::on_timer()
   auto static_objects = create_float_data(static_objects_shape_, 0.0f);
   auto lanes = lane_segments_matrix.data();
   auto lanes_speed_limit = lane_segments_speed.data();
-  auto route_lanes = create_float_data(route_lanes_shape_);
+  auto route_lanes = route_segments_matrix.data();
+  // Allocate raw memory for bool array
+  size_t lane_speed_tensor_num_elements = std::accumulate(
+    lanes_speed_limit_shape_.begin(), lanes_speed_limit_shape_.end(), 1,
+    std::multiplies<int64_t>());
+  auto raw_speed_bool_array =
+    std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
+
+  for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
+    raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > 0.0f);
+  }
 
   auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
     mem_info, ego_current_state.data(), ego_current_state.size(), ego_current_state_shape_.data(),
@@ -157,54 +196,17 @@ void DiffusionPlanner::on_timer()
     std::accumulate(lanes_shape_.begin(), lanes_shape_.end(), 1, std::multiplies<int64_t>());
   auto lanes_tensor = Ort::Value::CreateTensor<float>(
     mem_info, lanes, lane_tensor_num_elements, lanes_shape_.data(), lanes_shape_.size());
-
-  size_t lane_speed_tensor_num_elements = std::accumulate(
-    lanes_speed_limit_shape_.begin(), lanes_speed_limit_shape_.end(), 1,
-    std::multiplies<int64_t>());
   auto lanes_speed_limit_tensor = Ort::Value::CreateTensor<float>(
     mem_info, lanes_speed_limit, lane_speed_tensor_num_elements, lanes_speed_limit_shape_.data(),
     lanes_speed_limit_shape_.size());
-
-  // Allocate raw memory for bool array
-  auto raw_speed_bool_array =
-    std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
-
-  for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
-    raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > 0.0f);
-  }
-
-  // Create the tensor
   auto lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
     mem_info, raw_speed_bool_array.get(), lane_speed_tensor_num_elements,
     lanes_has_speed_limit_shape_.data(), lanes_has_speed_limit_shape_.size());
-
+  size_t route_tensor_num_elements =
+    std::accumulate(lanes_shape_.begin(), lanes_shape_.end(), 1, std::multiplies<int64_t>());
   auto route_lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, route_lanes.data(), route_lanes.size(), route_lanes_shape_.data(),
+    mem_info, route_lanes, route_tensor_num_elements, route_lanes_shape_.data(),
     route_lanes_shape_.size());
-
-  // TODO(Daniel): move this to a different callback for speed?
-  std::cerr << "Route segments: " << std::endl;
-  std::cerr << "Route segments: " << route_ptr_->segments.size() << std::endl;
-  Eigen::MatrixXf full_route_segment_matrix(
-    NUM_LANE_POINTS * route_ptr_->segments.size(), LANE_MATRIX_DIM);
-  long route_segment_rows = 0;
-  for (const auto & route_segment : route_ptr_->segments) {
-    auto route_segment_row = segment_row_indices_.find(route_segment.preferred_primitive.id);
-    std::cerr << "Route segment is : " << route_segment.preferred_primitive.id << std::endl;
-    std::cerr << "Route segment row in dict: " << route_segment_row->second << std::endl;
-    full_route_segment_matrix.block(route_segment_rows, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM) =
-      map_lane_segments_matrix_.block(
-        route_segment_row->second, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM);
-    route_segment_rows += NUM_LANE_POINTS;
-  }
-
-  std::cerr << "full_route_segment_matrix\n";
-  for (long i = 0; i < full_route_segment_matrix.rows(); ++i) {
-    for (long j = 0; j < full_route_segment_matrix.cols(); ++j) {
-      std::cerr << full_route_segment_matrix(i, j) << " ";
-    }
-    std::cerr << std::endl;
-  }
 
   Ort::Value input_tensors[] = {
     std::move(ego_current_state_tensor), std::move(neighbor_agents_past_tensor),
@@ -223,11 +225,11 @@ void DiffusionPlanner::on_timer()
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
     std::cout << "Inference ran successfully, got " << output.size() << " outputs." << std::endl;
-    // auto data = output[0].GetTensorMutableData<float>();
-    std::cout << "Output data: ";
-    // for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
-    //   std::cout << data[i] << " ";
-    // }
+    auto data = output[0].GetTensorMutableData<float>();
+    std::cout << "Output data: " << output[0].GetTensorTypeAndShapeInfo().GetElementCount() << "\n";
+    for (size_t i = 0; i < output[0].GetTensorTypeAndShapeInfo().GetElementCount(); ++i) {
+      std::cout << data[i] << " ";
+    }
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
   }
