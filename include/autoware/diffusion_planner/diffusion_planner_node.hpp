@@ -139,6 +139,7 @@ public:
   InputDataMap create_input_data();
   void normalize_input_data(InputDataMap & input_data_map);
 
+  InputDataMap create_input_data();
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
   Ort::Env env_;
