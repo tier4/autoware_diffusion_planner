@@ -20,9 +20,11 @@
 
 #include <Eigen/src/Core/Matrix.h>
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <vector>
 
@@ -145,6 +147,46 @@ std::vector<float> DiffusionPlanner::get_route_segments(
     route_segments_matrix.data(), route_segments_matrix.data() + route_segments_matrix.size()};
 }
 
+void DiffusionPlanner::normalize_input_data(InputDataMap & input_data_map)
+{
+  auto normalize_vector = [](
+                            std::vector<float> & data, const std::vector<float> & mean,
+                            const std::vector<float> & std_dev) -> void {
+    assert(!data.empty() && "Data vector must not be empty");
+    assert((mean.size() == std_dev.size()) && "Mean and std must be same size");
+    assert((data.size() % std_dev.size() == 0) && "Data size must be divisible by std_dev size");
+    auto cols = std_dev.size();
+    auto rows = data.size() / cols;
+
+    for (size_t row = 0; row < rows; ++row) {
+      const auto offset = row * cols;
+      const auto row_begin =
+        data.begin() + static_cast<std::vector<float>::difference_type>(offset);
+
+      bool is_zero_row = std::all_of(
+        row_begin, row_begin + static_cast<std::vector<float>::difference_type>(cols),
+        [](float x) { return std::abs(x) < std::numeric_limits<float>::epsilon(); });
+
+      if (is_zero_row) continue;
+
+      for (size_t col = 0; col < cols; ++col) {
+        float m = (mean.size() == 1) ? mean[0] : mean[col];
+        float s = (std_dev.size() == 1) ? std_dev[0] : std_dev[col];
+        data[offset + col] = (data[offset + col] - m) / s;
+      }
+    }
+  };
+
+  for (auto & [key, value] : input_data_map) {
+    if (normalization_map_.find(key) != normalization_map_.end()) {
+      const auto & [mean, std_dev] = normalization_map_[key];
+      normalize_vector(value, mean, std_dev);
+    } else {
+      RCLCPP_WARN(get_logger(), "No normalization data for key: %s", key.c_str());
+    }
+  }
+}
+
 InputDataMap DiffusionPlanner::create_input_data()
 {
   InputDataMap input_data_map;
@@ -192,6 +234,8 @@ InputDataMap DiffusionPlanner::create_input_data()
   auto route_segments = get_route_segments(map_to_ego_transform);
   input_data_map["route_lanes"] = route_segments;
 
+  // Normalization of data
+  normalize_input_data(input_data_map);
   return input_data_map;
 }
 

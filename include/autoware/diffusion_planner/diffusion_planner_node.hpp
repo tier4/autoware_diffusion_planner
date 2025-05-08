@@ -137,6 +137,8 @@ public:
   std::vector<float> get_route_segments(const Eigen::Matrix4f & map_to_ego_transform);
 
   InputDataMap create_input_data();
+  void normalize_input_data(InputDataMap & input_data_map);
+
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
   Ort::Env env_;
