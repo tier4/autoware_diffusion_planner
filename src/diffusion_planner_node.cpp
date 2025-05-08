@@ -45,6 +45,7 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
     return;
   }
 
+  normalization_map_ = load_normalization_stats(params_.args_path);
   load_model(params_.model_path);
 
   timer_ = rclcpp::create_timer(
@@ -59,6 +60,7 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
 void DiffusionPlanner::set_up_params()
 {
   params_.model_path = this->declare_parameter<std::string>("onnx_model_path", "");
+  params_.args_path = this->declare_parameter<std::string>("args_path", "");
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
   RCLCPP_INFO(get_logger(), "Setting up parameters for Diffusion Planner");
 }
@@ -164,7 +166,6 @@ void DiffusionPlanner::on_timer()
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   Ort::Allocator cuda_allocator(session_, mem_info);
 
-  // auto ego_current_state = create_float_data(ego_current_state_shape_);
   auto ego_current_state = ego_state.as_array();
   auto neighbor_agents_past = ego_centric_data.as_vector();
   auto static_objects = create_float_data(static_objects_shape_, 0.0f);
@@ -191,7 +192,6 @@ void DiffusionPlanner::on_timer()
   auto static_objects_tensor = Ort::Value::CreateTensor<float>(
     mem_info, static_objects.data(), static_objects.size(), static_objects_shape_.data(),
     static_objects_shape_.size());
-
   size_t lane_tensor_num_elements =
     std::accumulate(lanes_shape_.begin(), lanes_shape_.end(), 1, std::multiplies<int64_t>());
   auto lanes_tensor = Ort::Value::CreateTensor<float>(

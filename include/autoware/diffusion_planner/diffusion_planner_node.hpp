@@ -17,6 +17,7 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
+#include "autoware/diffusion_planner/utils/arg_reader.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -97,6 +98,7 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
 struct DiffusionPlannerParams
 {
   std::string model_path;
+  std::string args_path;
   double planning_frequency_hz;
 };
 struct DiffusionPlannerDebugParams
@@ -150,6 +152,7 @@ public:
   // Node parameters
   DiffusionPlannerParams params_;
   DiffusionPlannerDebugParams debug_params_;
+  NormalizationMap normalization_map_;
 
   // Lanelet map
   LaneletRoute::ConstSharedPtr route_ptr_;
