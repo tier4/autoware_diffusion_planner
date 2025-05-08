@@ -234,7 +234,7 @@ InputDataMap DiffusionPlanner::create_input_data()
   auto route_segments = get_route_segments(map_to_ego_transform);
   input_data_map["route_lanes"] = route_segments;
 
-  // Normalization of data
+  // normalization of data
   normalize_input_data(input_data_map);
   return input_data_map;
 }
