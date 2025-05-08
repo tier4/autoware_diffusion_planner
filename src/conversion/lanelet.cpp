@@ -157,68 +157,60 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
   // parse lanelet layers
   for (const auto & lanelet : lanelet_map_ptr_->laneletLayer) {
     const auto lanelet_subtype = toSubtypeName(lanelet);
-    if (isLaneLike(lanelet_subtype)) {
-      Polyline lane_polyline(MapType::Unused);
-      std::vector<BoundarySegment> left_boundary_segments;
-      std::vector<BoundarySegment> right_boundary_segments;
-
-      // convert centerlines
-      if (!isRoadwayLike(lanelet_subtype)) {
-        continue;
-      }
-      // TODO (Daniel avoid unnecessary copy and creation)
-      // TODO(Daniel): magic number num points
-      auto points = fromLinestring(lanelet.centerline3d());
-      lane_polyline.assign_waypoints(interpolate_points(points, LANE_POINTS));
-
-      // convert boundaries except of virtual lines
-      if (!isTurnableIntersection(lanelet)) {
-        const auto left_bound = lanelet.leftBound3d();
-        if (isBoundaryLike(left_bound)) {
-          auto points = fromLinestring(left_bound);
-          left_boundary_segments.emplace_back(
-            MapType::Unused, interpolate_points(points, LANE_POINTS));
-        }
-        const auto right_bound = lanelet.rightBound3d();
-        if (isBoundaryLike(right_bound)) {
-          auto points = fromLinestring(right_bound);
-          right_boundary_segments.emplace_back(
-            MapType::Unused, interpolate_points(points, LANE_POINTS));
-        }
-      }
-      constexpr float kph2mph = 0.621371;
-      const auto & attrs = lanelet.attributes();
-      bool is_intersection = attrs.find("turn_direction") != attrs.end();
-      std::optional<float> speed_limit_mph =
-        attrs.find("speed_limit") != attrs.end()
-          ? std::make_optional(std::stof(attrs.at("speed_limit").value()) * kph2mph)
-          : std::nullopt;
-
-      // TODO(Daniel): get proper light state, use behavior_velocity_traffic_light module as guide.
-      auto traffic_light = TrafficLightElement::UNKNOWN;
-      lane_segments.emplace_back(
-        lanelet.id(), lane_polyline, is_intersection, left_boundary_segments,
-        right_boundary_segments, speed_limit_mph, traffic_light);
+    if (!isLaneLike(lanelet_subtype)) {
+      std::cerr << "Skipping lanelet ID, since it is not LaneLike: " << lanelet.id() << std::endl;
+      continue;
     }
+    Polyline lane_polyline(MapType::Unused);
+    std::vector<BoundarySegment> left_boundary_segments;
+    std::vector<BoundarySegment> right_boundary_segments;
+    // TODO (Daniel avoid unnecessary copy and creation)
+    // TODO(Daniel): magic number num points
+    auto points = fromLinestring(lanelet.centerline3d());
+    lane_polyline.assign_waypoints(interpolate_points(points, LANE_POINTS));
+    const auto left_bound = lanelet.leftBound3d();
+    auto left_points = fromLinestring(left_bound);
+    left_boundary_segments.emplace_back(
+      MapType::Unused, interpolate_points(left_points, LANE_POINTS));
+    const auto right_bound = lanelet.rightBound3d();
+    auto right_points = fromLinestring(right_bound);
+    right_boundary_segments.emplace_back(
+      MapType::Unused, interpolate_points(right_points, LANE_POINTS));
+
+    constexpr float kph2mph = 0.621371;
+    const auto & attrs = lanelet.attributes();
+    bool is_intersection = attrs.find("turn_direction") != attrs.end();
+    std::optional<float> speed_limit_mph =
+      attrs.find("speed_limit") != attrs.end()
+        ? std::make_optional(std::stof(attrs.at("speed_limit").value()) * kph2mph)
+        : std::nullopt;
+
+    // TODO(Daniel): get proper light state, use behavior_velocity_traffic_light module as guide.
+    auto traffic_light = TrafficLightElement::UNKNOWN;
+    lane_segments.emplace_back(
+      lanelet.id(), lane_polyline, is_intersection, left_boundary_segments, right_boundary_segments,
+      speed_limit_mph, traffic_light);
   }
   return lane_segments;
 }
 
 [[nodiscard]] Eigen::MatrixXf LaneletConverter::process_segments_to_matrix(
-  const std::vector<LaneSegment> & lane_segments, float center_x, float center_y,
-  float mask_range) const
+  const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices,
+  float center_x, float center_y, float mask_range) const
 {
   std::vector<Eigen::MatrixXf> all_segment_matrices;
-  size_t total_rows = 0;
+
+  long total_rows = 0;
 
   for (const auto & segment : lane_segments) {
     Eigen::MatrixXf segment_matrix =
       process_segment_to_matrix(segment, center_x, center_y, mask_range);
-    if (segment_matrix.rows() < 1) {
-      continue;
+
+    if (segment_matrix.rows() != LANE_POINTS) {
+      throw std::runtime_error("Segment matrix rows not equal to 20");
     }
     total_rows += segment_matrix.rows();
-    all_segment_matrices.push_back(std::move(segment_matrix));
+    all_segment_matrices.push_back(segment_matrix);
   }
 
   // Now allocate the full matrix
@@ -228,6 +220,11 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
   long current_row = 0;
   for (const auto & mat : all_segment_matrices) {
     stacked_matrix.middleRows(current_row, mat.rows()) = mat;
+    auto id = static_cast<int64_t>(mat(0, 13));
+    segment_row_indices.emplace(id, current_row);
+    if (mat.rows() != LANE_POINTS) {
+      throw std::runtime_error("(2)Segment matrix rows not equal to 20");
+    }
     current_row += mat.rows();
   }
   return stacked_matrix;

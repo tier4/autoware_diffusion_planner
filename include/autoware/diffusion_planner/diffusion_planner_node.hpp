@@ -133,6 +133,7 @@ public:
   // Model input shapes
   static constexpr size_t NUM_LANE_POINTS = 20;
   static constexpr size_t LANE_POINT_DIM = 12;
+  static constexpr size_t LANE_MATRIX_DIM = 14;
 
   const std::vector<long> ego_current_state_shape_ = {1, 10};
   const std::vector<long> neighbor_agents_past_shape_ = {1, 32, 21, 11};
@@ -151,12 +152,14 @@ public:
   DiffusionPlannerDebugParams debug_params_;
 
   // Lanelet map
+  LaneletRoute::ConstSharedPtr route_ptr_;
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
   std::shared_ptr<lanelet::routing::RoutingGraph> routing_graph_ptr_;
   std::shared_ptr<lanelet::traffic_rules::TrafficRules> traffic_rules_ptr_;
   std::unique_ptr<LaneletConverter> lanelet_converter_ptr_;
   std::vector<LaneSegment> lane_segments_;
   Eigen::MatrixXf map_lane_segments_matrix_;
+  std::map<int64_t, long> segment_row_indices_;
   bool is_map_loaded_{false};
 
   // Node elements
