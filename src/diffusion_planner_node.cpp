@@ -38,8 +38,8 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   // Initialize the node
   rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("diffusion_planner", options);
   pub_trajectory_ = node->create_publisher<Trajectory>("~/output/trajectory", 1);
-  pub_route_marker_ = node->create_publisher<MarkerArray>("~/debug/route_marker", 1);
-  pub_lane_marker_ = node->create_publisher<MarkerArray>("~/debug/lane_marker", 1);
+  pub_route_marker_ = node->create_publisher<MarkerArray>("~/debug/route_marker", 10);
+  pub_lane_marker_ = node->create_publisher<MarkerArray>("~/debug/lane_marker", 10);
   debug_processing_time_detail_pub_ = node->create_publisher<autoware_utils::ProcessingTimeDetail>(
     "~/debug/processing_time_detail_ms", 1);
   time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
@@ -107,13 +107,14 @@ std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
     ego_centric_lane_segments.block(0, 0, total_lane_points, LANE_POINT_DIM);
   // convert to vector
   // print for debug
-  // std::cerr << "ego_centric_lane_segments\n";
-  // for (long i = 0; i < lane_segments_matrix.rows(); ++i) {
-  //   for (long j = 0; j < lane_segments_matrix.cols(); ++j) {
-  //     std::cerr << lane_segments_matrix(i, j) << " ";
-  //   }
-  //   std::cerr << std::endl;
-  // }
+  std::cerr << "ego_centric_lane_segments\n";
+  for (long i = 0; i < lane_segments_matrix.rows(); ++i) {
+    for (long j = 0; j < lane_segments_matrix.cols(); ++j) {
+      std::cerr << lane_segments_matrix(i, j) << " ";
+    }
+    std::cerr << std::endl;
+  }
+  lane_segments_matrix.transposeInPlace();
   return {lane_segments_matrix.data(), lane_segments_matrix.data() + lane_segments_matrix.size()};
 }
 
@@ -124,6 +125,7 @@ std::vector<float> DiffusionPlanner::extract_lane_speeds(
   Eigen::MatrixXf lane_segments_speed(total_lane_points, lanes_speed_limit_shape_[2]);
   lane_segments_speed.block(0, 0, total_lane_points, lanes_speed_limit_shape_[2]) =
     ego_centric_lane_segments.block(0, 12, total_lane_points, lanes_speed_limit_shape_[2]);
+  lane_segments_speed.transposeInPlace();
   return {lane_segments_speed.data(), lane_segments_speed.data() + lane_segments_speed.size()};
 }
 
@@ -155,6 +157,7 @@ std::vector<float> DiffusionPlanner::get_route_segments(
   Eigen::MatrixXf route_segments_matrix(total_route_points, LANE_POINT_DIM);
   route_segments_matrix.block(0, 0, total_route_points, LANE_POINT_DIM) =
     ego_centric_route_segments.block(0, 0, total_route_points, LANE_POINT_DIM);
+  route_segments_matrix.transposeInPlace();
   return {
     route_segments_matrix.data(), route_segments_matrix.data() + route_segments_matrix.size()};
 }
@@ -217,8 +220,8 @@ MarkerArray DiffusionPlanner::create_route_marker(
   //   long index = ((b * L + l) * P + p) * D + d;
   //   return route_vector[index];
   // };
-
-  for (long l = 0; l < map_lane_segments_matrix_.rows() / 20; ++l) {
+  std::cerr << "route_vector.size() / (20 * 12) " << route_vector.size() / (20 * 12) << "\n";
+  for (size_t l = 0; l < route_vector.size() / (20 * 12); ++l) {
     // Check if the centerline is all zeros
     Marker marker;
     marker.header.stamp = stamp;
@@ -243,8 +246,8 @@ MarkerArray DiffusionPlanner::create_route_marker(
     marker.lifetime = lifetime;
 
     for (long p = 0; p < 20; ++p) {
-      auto x = route_vector[20 * l + p * 14 + 0];
-      auto y = route_vector[20 * l + p * 14 + 1];
+      auto x = route_vector[20 * l + p * 12 + 0];
+      auto y = route_vector[20 * l + p * 12 + 1];
       float z = 0.5f;
       float norm = std::sqrt(x * x + y * y + z * z);
       if (norm < 2.0f) continue;
@@ -302,6 +305,13 @@ InputDataMap DiffusionPlanner::create_input_data()
   Eigen::MatrixXf ego_centric_lane_segments =
     transform_and_select_rows(map_lane_segments_matrix_, map_to_ego_transform, lanes_shape_[1]);
   auto lane_data = extract_ego_centric_lane_segments(ego_centric_lane_segments);
+
+  std::cerr << "lane data in vector form\n";
+  for (size_t i = 0; i < lane_data.size(); ++i) {
+    std::cerr << lane_data[i] << " ";
+    if (i % 12 == 0) std::cerr << "\n";
+  }
+  std::cerr << "\n";
   input_data_map["lanes"] = lane_data;
   auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
   input_data_map["lanes_speed_limit"] = lane_speed_data;
@@ -310,8 +320,9 @@ InputDataMap DiffusionPlanner::create_input_data()
   auto route_segments = get_route_segments(map_to_ego_transform);
   input_data_map["route_lanes"] = route_segments;
 
-  // auto route_markers = create_route_marker(route_segments, route_lanes_shape_, this->now());
-  // pub_route_marker_->publish(route_markers);
+  auto route_markers = create_route_marker(
+    route_segments, route_lanes_shape_, this->now(), {0.1, 0.8, 0.0, 0.8}, "base_link");
+  pub_route_marker_->publish(route_markers);
 
   // normalization of data
   normalize_input_data(input_data_map);
@@ -373,13 +384,13 @@ Trajectory DiffusionPlanner::create_trajectory(
   }
 
   // print matrix for debugging
-  // std::cerr << "Prediction matrix:\n";
-  // for (long i = 0; i < prediction_matrix.rows(); ++i) {
-  //   for (long j = 0; j < prediction_matrix.cols(); ++j) {
-  //     std::cerr << prediction_matrix(i, j) << " ";
-  //   }
-  //   std::cerr << std::endl;
-  // }
+  std::cerr << "Prediction matrix:\n";
+  for (long i = 0; i < prediction_matrix.rows(); ++i) {
+    for (long j = 0; j < prediction_matrix.cols(); ++j) {
+      std::cerr << prediction_matrix(i, j) << " ";
+    }
+    std::cerr << std::endl;
+  }
 
   return trajectory;
 }
@@ -398,25 +409,6 @@ void DiffusionPlanner::on_timer()
     RCLCPP_WARN(get_logger(), "No input data available for inference");
     return;
   }
-
-  std::vector<float> lane_data(
-    map_lane_segments_matrix_.data(),
-    map_lane_segments_matrix_.data() + map_lane_segments_matrix_.size());
-  const std::vector<long> map_lanes_shape_ = {1, map_lane_segments_matrix_.rows() / 20, 20, 14};
-
-  for (long l = 0; l < map_lane_segments_matrix_.rows() / 20; ++l) {
-    for (long p = 0; p < 20; ++p) {
-      auto x = lane_data[20 * l + p * 14 + 0];
-      auto y = lane_data[20 * l + p * 14 + 1];
-      std::cerr << "x: " << x << " y: " << y << "\n";
-      assert(x > 100.0 && "GOD NO X");
-      assert(y > 100.0 && "GOD NO Y");
-    }
-  }
-
-  auto lane_markers =
-    create_route_marker(lane_data, map_lanes_shape_, this->now(), {0.0f, 0.0f, 1.0f, 0.8f}, "map");
-  pub_lane_marker_->publish(lane_markers);
 
   auto ego_current_state = input_data_map["ego_current_state"];
   auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
