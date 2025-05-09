@@ -121,7 +121,7 @@ std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
 std::vector<float> DiffusionPlanner::extract_lane_speeds(
   const Eigen::MatrixXf & ego_centric_lane_segments)
 {
-  const auto total_lane_points = lanes_speed_limit_shape_[1] * NUM_LANE_POINTS;
+  const auto total_lane_points = lanes_speed_limit_shape_[1];
   Eigen::MatrixXf lane_segments_speed(total_lane_points, lanes_speed_limit_shape_[2]);
   lane_segments_speed.block(0, 0, total_lane_points, lanes_speed_limit_shape_[2]) =
     ego_centric_lane_segments.block(0, 12, total_lane_points, lanes_speed_limit_shape_[2]);
@@ -130,7 +130,7 @@ std::vector<float> DiffusionPlanner::extract_lane_speeds(
 }
 
 std::vector<float> DiffusionPlanner::get_route_segments(
-  const Eigen::Matrix4f & map_to_ego_transform)
+  const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y)
 {
   Eigen::MatrixXf full_route_segment_matrix(
     NUM_LANE_POINTS * route_ptr_->segments.size(), LANE_MATRIX_DIM);
@@ -147,7 +147,7 @@ std::vector<float> DiffusionPlanner::get_route_segments(
   }
 
   Eigen::MatrixXf ego_centric_route_segments = transform_and_select_rows(
-    full_route_segment_matrix, map_to_ego_transform, route_lanes_shape_[1]);
+    full_route_segment_matrix, map_to_ego_transform, center_x, center_y, route_lanes_shape_[1]);
 
   // std::cerr << " ego_centric_route_segments\n";
   // for (long i = 0; i < ego_centric_route_segments.rows(); ++i) {
@@ -311,20 +311,56 @@ InputDataMap DiffusionPlanner::create_input_data()
   input_data_map["static_objects"] = static_objects;
 
   // map data on ego reference frame
-  Eigen::MatrixXf ego_centric_lane_segments =
-    transform_and_select_rows(map_lane_segments_matrix_, map_to_ego_transform, lanes_shape_[1]);
+  const auto & center_x = ego_kinematic_state->pose.pose.position.x;
+  const auto & center_y = ego_kinematic_state->pose.pose.position.y;
+
+  Eigen::MatrixXf ego_centric_lane_segments = transform_and_select_rows(
+    map_lane_segments_matrix_, map_to_ego_transform, center_x, center_y, lanes_shape_[1]);
   auto lane_data = extract_ego_centric_lane_segments(ego_centric_lane_segments);
   input_data_map["lanes"] = lane_data;
 
-  auto N = lanes_shape_[1];
-  auto T = lanes_shape_[2];
-  auto D = lanes_shape_[3];
+  [[maybe_unused]] auto get_pythorch_tensor = [](std::string key) {
+    return load_tensor(
+      "/home/danielsanchez/pilot-auto-new-framework/src/autoware/trajectory_generator/"
+      "autoware_diffusion_planner/data/" +
+      key + ".bin");
+  };
+
+  // input_data_map["lanes"] = get_pythorch_tensor("lanes");
+
+  // auto N = lanes_shape_[1];
+  // auto T = lanes_shape_[2];
+  // auto D = lanes_shape_[3];
+  // std::cerr << "lane data in vector form\n";
+  // for (long n = 0; n < N; ++n) {
+  //   for (long t = 0; t < T; ++t) {
+  //     std::cerr << "[";
+  //     for (long d = 0; d < D; ++d) {
+  //       auto val = input_data_map["lanes"][(T * D) * n + (D)*t + d];
+  //       std::cerr << val << ",";
+  //     }
+  //     std::cerr << "]\n";
+  //   }
+  //   std::cerr << "\n";
+  // }
+  // std::cerr << "\n";
+
+  auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
+  input_data_map["lanes_speed_limit"] = lane_speed_data;
+
+  // route data on ego reference frame
+  auto route_segments = get_route_segments(map_to_ego_transform, center_x, center_y);
+  input_data_map["route_lanes"] = route_segments;
+
+  auto N = route_lanes_shape_[1];
+  auto T = route_lanes_shape_[2];
+  auto D = route_lanes_shape_[3];
   std::cerr << "lane data in vector form\n";
   for (long n = 0; n < N; ++n) {
     for (long t = 0; t < T; ++t) {
       std::cerr << "[";
       for (long d = 0; d < D; ++d) {
-        auto val = input_data_map["lanes"][(T * D) * n + (D)*t + d];
+        auto val = input_data_map["route_lanes"][(T * D) * n + (D)*t + d];
         std::cerr << val << ",";
       }
       std::cerr << "]\n";
@@ -332,13 +368,6 @@ InputDataMap DiffusionPlanner::create_input_data()
     std::cerr << "\n";
   }
   std::cerr << "\n";
-
-  auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
-  input_data_map["lanes_speed_limit"] = lane_speed_data;
-
-  // route data on ego reference frame
-  auto route_segments = get_route_segments(map_to_ego_transform);
-  input_data_map["route_lanes"] = route_segments;
 
   auto route_markers = create_route_marker(
     route_segments, route_lanes_shape_, this->now(), {0.1, 0.8, 0.0, 0.8}, "base_link");
@@ -423,6 +452,13 @@ void DiffusionPlanner::on_timer()
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   Ort::Allocator cuda_allocator(session_, mem_info);
 
+  [[maybe_unused]] auto get_pythorch_tensor = [](std::string key) {
+    return load_tensor(
+      "/home/danielsanchez/pilot-auto-new-framework/src/autoware/trajectory_generator/"
+      "autoware_diffusion_planner/data/" +
+      key + ".bin");
+  };
+
   auto input_data_map = create_input_data();
   if (input_data_map.empty()) {
     RCLCPP_WARN(get_logger(), "No input data available for inference");
@@ -435,6 +471,19 @@ void DiffusionPlanner::on_timer()
   auto lanes = input_data_map["lanes"];
   auto lanes_speed_limit = input_data_map["lanes_speed_limit"];
   auto route_lanes = input_data_map["route_lanes"];
+
+  // auto ego_current_state = get_pythorch_tensor("ego_current_state");
+  // auto neighbor_agents_past = get_pythorch_tensor("neighbor_agents_past");
+  // auto static_objects = get_pythorch_tensor("static_objects");
+  // auto lanes = get_pythorch_tensor("lanes");
+  // auto lanes_speed_limit = get_pythorch_tensor("lanes_speed_limit");
+
+  // std::cerr << "input_data_map[lanes_speed_limit]\n";
+  // for (auto & val : input_data_map["lanes_speed_limit"]) {
+  //   std::cerr << val << "\n";
+  // }
+
+  // auto route_lanes = get_pythorch_tensor("route_lanes");
 
   // Allocate raw memory for bool array
   size_t lane_speed_tensor_num_elements = std::accumulate(

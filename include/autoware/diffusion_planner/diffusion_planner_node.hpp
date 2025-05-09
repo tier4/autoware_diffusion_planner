@@ -151,7 +151,8 @@ public:
   std::vector<float> extract_ego_centric_lane_segments(
     const Eigen::MatrixXf & ego_centric_lane_segments);
   std::vector<float> extract_lane_speeds(const Eigen::MatrixXf & ego_centric_lane_segments);
-  std::vector<float> get_route_segments(const Eigen::Matrix4f & map_to_ego_transform);
+  std::vector<float> get_route_segments(
+    const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y);
 
   InputDataMap create_input_data();
   void normalize_input_data(InputDataMap & input_data_map);
@@ -250,5 +251,23 @@ public:
   tf2_ros::Buffer tf_buffer_{get_clock()};
   tf2_ros::TransformListener tf_listener_{tf_buffer_};
 };
+
+std::vector<float> load_tensor(const std::string & filename)
+{
+  std::ifstream file(filename, std::ios::binary);
+  if (!file) {
+    throw std::runtime_error("Failed to open file: " + filename);
+  }
+
+  file.seekg(0, std::ios::end);
+  std::streamsize size = file.tellg();
+  if (size % sizeof(float) != 0)
+    throw std::runtime_error("File size is not aligned with float size");
+
+  file.seekg(0, std::ios::beg);
+  std::vector<float> buffer(size / sizeof(float));
+  file.read(reinterpret_cast<char *>(buffer.data()), size);
+  return buffer;
+}
 }  // namespace autoware::diffusion_planner
 #endif  // AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
