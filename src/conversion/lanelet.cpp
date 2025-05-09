@@ -157,7 +157,7 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
   // parse lanelet layers
   for (const auto & lanelet : lanelet_map_ptr_->laneletLayer) {
     const auto lanelet_subtype = toSubtypeName(lanelet);
-    if (!isLaneLike(lanelet_subtype)) {
+    if (!isLaneLike(lanelet_subtype) || isBoundaryLike(lanelet.centerline3d())) {
       std::cerr << "Skipping lanelet ID, since it is not LaneLike: " << lanelet.id() << std::endl;
       continue;
     }
@@ -165,7 +165,6 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
     std::vector<BoundarySegment> left_boundary_segments;
     std::vector<BoundarySegment> right_boundary_segments;
     // TODO (Daniel avoid unnecessary copy and creation)
-    // TODO(Daniel): magic number num points
     auto points = fromLinestring(lanelet.centerline3d());
     lane_polyline.assign_waypoints(interpolate_points(points, LANE_POINTS));
     const auto left_bound = lanelet.leftBound3d();

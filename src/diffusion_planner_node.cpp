@@ -107,13 +107,13 @@ std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
     ego_centric_lane_segments.block(0, 0, total_lane_points, LANE_POINT_DIM);
   // convert to vector
   // print for debug
-  std::cerr << "ego_centric_lane_segments\n";
-  for (long i = 0; i < lane_segments_matrix.rows(); ++i) {
-    for (long j = 0; j < lane_segments_matrix.cols(); ++j) {
-      std::cerr << lane_segments_matrix(i, j) << " ";
-    }
-    std::cerr << std::endl;
-  }
+  // std::cerr << "ego_centric_lane_segments\n";
+  // for (long i = 0; i < lane_segments_matrix.rows(); ++i) {
+  //   for (long j = 0; j < lane_segments_matrix.cols(); ++j) {
+  //     std::cerr << lane_segments_matrix(i, j) << " ";
+  //   }
+  //   std::cerr << std::endl;
+  // }
   lane_segments_matrix.transposeInPlace();
   return {lane_segments_matrix.data(), lane_segments_matrix.data() + lane_segments_matrix.size()};
 }
@@ -136,9 +136,13 @@ std::vector<float> DiffusionPlanner::get_route_segments(
     NUM_LANE_POINTS * route_ptr_->segments.size(), LANE_MATRIX_DIM);
   long route_segment_rows = 0;
   for (const auto & route_segment : route_ptr_->segments) {
-    auto route_segment_row = segment_row_indices_[route_segment.preferred_primitive.id];
+    auto route_segment_row_itr = segment_row_indices_.find(route_segment.preferred_primitive.id);
+    if (route_segment_row_itr == segment_row_indices_.end()) {
+      continue;
+    }
     full_route_segment_matrix.block(route_segment_rows, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM) =
-      map_lane_segments_matrix_.block(route_segment_row, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM);
+      map_lane_segments_matrix_.block(
+        route_segment_row_itr->second, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM);
     route_segment_rows += NUM_LANE_POINTS;
   }
 
@@ -289,13 +293,18 @@ InputDataMap DiffusionPlanner::create_input_data()
   // TODO(Daniel): use vehicle_info_utils
   EgoState ego_state(*ego_kinematic_state, *ego_acceleration, 5.0);
   input_data_map["ego_current_state"] = ego_state.as_array();
+  std::cerr << "ego state before norm, size " << ego_state.as_array().size() << "\n";
+  for (auto elem : ego_state.as_array()) {
+    std::cerr << elem << ", ";
+  }
+  std::cerr << "\n";
 
   // Agent data on ego reference frame
   transforms_ = get_transform_matrix(*ego_kinematic_state);
   auto map_to_ego_transform = transforms_.second;
   auto ego_centric_data = get_ego_centric_agent_data(*objects, map_to_ego_transform);
   input_data_map["neighbor_agents_past"] = ego_centric_data.as_vector();
-
+  // auto B = neighbor_agents_past_shape_[0];
   // Static objects
   // TODO(Daniel): add static objects
   auto static_objects = create_float_data(static_objects_shape_, 0.0f);
@@ -305,14 +314,25 @@ InputDataMap DiffusionPlanner::create_input_data()
   Eigen::MatrixXf ego_centric_lane_segments =
     transform_and_select_rows(map_lane_segments_matrix_, map_to_ego_transform, lanes_shape_[1]);
   auto lane_data = extract_ego_centric_lane_segments(ego_centric_lane_segments);
+  input_data_map["lanes"] = lane_data;
 
+  auto N = lanes_shape_[1];
+  auto T = lanes_shape_[2];
+  auto D = lanes_shape_[3];
   std::cerr << "lane data in vector form\n";
-  for (size_t i = 0; i < lane_data.size(); ++i) {
-    std::cerr << lane_data[i] << " ";
-    if (i % 12 == 0) std::cerr << "\n";
+  for (long n = 0; n < N; ++n) {
+    for (long t = 0; t < T; ++t) {
+      std::cerr << "[";
+      for (long d = 0; d < D; ++d) {
+        auto val = input_data_map["lanes"][(T * D) * n + (D)*t + d];
+        std::cerr << val << ",";
+      }
+      std::cerr << "]\n";
+    }
+    std::cerr << "\n";
   }
   std::cerr << "\n";
-  input_data_map["lanes"] = lane_data;
+
   auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
   input_data_map["lanes_speed_limit"] = lane_speed_data;
 
@@ -359,6 +379,15 @@ Trajectory DiffusionPlanner::create_trajectory(
   // Copy only the relevant part
   prediction_matrix = mapped_data;  // Copies first rows*cols elements row-wise
 
+  // print matrix for debugging
+  // std::cerr << "Prediction matrix:\n";
+  // for (long i = 0; i < prediction_matrix.rows(); ++i) {
+  //   for (long j = 0; j < prediction_matrix.cols(); ++j) {
+  //     std::cerr << prediction_matrix(i, j) << " ";
+  //   }
+  //   std::cerr << std::endl;
+  // }
+
   prediction_matrix.transposeInPlace();
   transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
   transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
@@ -382,16 +411,6 @@ Trajectory DiffusionPlanner::create_trajectory(
     prev_y = p.pose.position.y;
     trajectory.points.push_back(p);
   }
-
-  // print matrix for debugging
-  std::cerr << "Prediction matrix:\n";
-  for (long i = 0; i < prediction_matrix.rows(); ++i) {
-    for (long j = 0; j < prediction_matrix.cols(); ++j) {
-      std::cerr << prediction_matrix(i, j) << " ";
-    }
-    std::cerr << std::endl;
-  }
-
   return trajectory;
 }
 
