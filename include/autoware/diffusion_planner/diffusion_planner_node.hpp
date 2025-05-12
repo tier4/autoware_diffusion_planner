@@ -73,6 +73,7 @@ using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
 using builtin_interfaces::msg::Duration;
 using builtin_interfaces::msg::Time;
 using geometry_msgs::msg::Point;
+using rcl_interfaces::msg::SetParametersResult;
 using std_msgs::msg::ColorRGBA;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
@@ -122,8 +123,8 @@ struct DiffusionPlannerParams
 };
 struct DiffusionPlannerDebugParams
 {
-  bool enable_debug;
-  bool enable_processing_time_detail;
+  bool publish_debug_route{false};
+  bool publish_debug_map{false};
 };
 
 std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 0.1f)
@@ -141,8 +142,8 @@ public:
   void set_up_params();
   void on_timer();
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
-  void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
   void load_model(const std::string & model_path);
+  SetParametersResult on_parameter(const std::vector<rclcpp::Parameter> & parameters);
 
   // preprocessing
   std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
@@ -209,6 +210,7 @@ public:
   std::optional<AgentData> agent_data_{std::nullopt};
 
   // Node parameters
+  OnSetParametersCallbackHandle::SharedPtr set_param_res_;
   DiffusionPlannerParams params_;
   DiffusionPlannerDebugParams debug_params_;
   NormalizationMap normalization_map_;

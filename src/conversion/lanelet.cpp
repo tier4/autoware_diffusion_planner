@@ -179,7 +179,6 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
 
     const auto & attrs = lanelet.attributes();
     bool is_intersection = attrs.find("turn_direction") != attrs.end();
-    std::cerr << "attrs.at(speed_limit) " << attrs.at("speed_limit").value() << "\n";
     std::optional<float> speed_limit_mph = attrs.find("speed_limit") != attrs.end()
                                              ? std::make_optional(autoware_utils_math::kmph2mps(
                                                  std::stof(attrs.at("speed_limit").value())))

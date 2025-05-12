@@ -306,12 +306,8 @@ inline void compute_distances(
   std::vector<RowWithDistance> & distances, float center_x, float center_y,
   float mask_range = 100.0)
 {
-  std::cerr << "compute_distances: input_matrix.rows() " << input_matrix.rows() << "\n";
-  std::cerr << "compute_distances: input_matrix.cols() " << input_matrix.cols() << "\n";
-
   const auto n = input_matrix.rows();
   distances.reserve(n);
-  std::cerr << "float center_x, float center_y " << center_x << ", " << center_y << "\n";
   for (long i = 0; i < n; i += LANE_POINTS) {
     // Directly access input matrix as raw memory
     float x = input_matrix.block(i, 0, LANE_POINTS, 1).mean();
@@ -402,14 +398,6 @@ inline Eigen::MatrixXf transform_xy_points(
       break;
     }
   }
-  std::cerr << "number inserted segments " << col_counter << "\n";
-  std::cerr << "number skipped segments " << skipped_segments << "\n";
-  std::cerr << "num_segments " << num_segments << "\n";
-  std::cerr << "n_total_segments " << n_total_segments << "\n";
-  std::cerr << "input_matrix.rows() " << input_matrix.rows() << "\n";
-  std::cerr << "input_matrix.cols() " << input_matrix.cols() << "\n";
-  std::cerr << "distances.size()" << distances.size() << "\n";
-
   // subtract center from boundaries
   output_matrix.row(4) = output_matrix.row(4) - output_matrix.row(0);
   output_matrix.row(5) = output_matrix.row(5) - output_matrix.row(1);

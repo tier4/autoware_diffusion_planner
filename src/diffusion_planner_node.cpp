@@ -61,6 +61,10 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   sub_map_ = create_subscription<HADMapBin>(
     "~/input/vector_map", rclcpp::QoS{1}.transient_local(),
     std::bind(&DiffusionPlanner::on_map, this, std::placeholders::_1));
+
+  // Parameter Callback
+  set_param_res_ = add_on_set_parameters_callback(
+    std::bind(&DiffusionPlanner::on_parameter, this, std::placeholders::_1));
 }
 
 void DiffusionPlanner::set_up_params()
@@ -68,7 +72,25 @@ void DiffusionPlanner::set_up_params()
   params_.model_path = this->declare_parameter<std::string>("onnx_model_path", "");
   params_.args_path = this->declare_parameter<std::string>("args_path", "");
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
+
+  debug_params_.publish_debug_map = this->declare_parameter<bool>("publish_debug_map", false);
+  debug_params_.publish_debug_route = this->declare_parameter<bool>("publish_debug_route", false);
   RCLCPP_INFO(get_logger(), "Setting up parameters for Diffusion Planner");
+}
+
+SetParametersResult DiffusionPlanner::on_parameter(
+  [[maybe_unused]] const std::vector<rclcpp::Parameter> & parameters)
+{
+  using autoware_utils::update_param;
+  DiffusionPlannerDebugParams temp_debug_params = debug_params_;
+  update_param<bool>(parameters, "publish_debug_map", temp_debug_params.publish_debug_map);
+  update_param<bool>(parameters, "publish_debug_route", temp_debug_params.publish_debug_route);
+  debug_params_ = temp_debug_params;
+
+  SetParametersResult result;
+  result.successful = true;
+  result.reason = "success";
+  return result;
 }
 
 void DiffusionPlanner::load_model(const std::string & model_path)
@@ -105,15 +127,6 @@ std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
   Eigen::MatrixXf lane_segments_matrix(total_lane_points, LANE_POINT_DIM);
   lane_segments_matrix.block(0, 0, total_lane_points, LANE_POINT_DIM) =
     ego_centric_lane_segments.block(0, 0, total_lane_points, LANE_POINT_DIM);
-  // convert to vector
-  // print for debug
-  // std::cerr << "ego_centric_lane_segments\n";
-  // for (long i = 0; i < lane_segments_matrix.rows(); ++i) {
-  //   for (long j = 0; j < lane_segments_matrix.cols(); ++j) {
-  //     std::cerr << lane_segments_matrix(i, j) << " ";
-  //   }
-  //   std::cerr << std::endl;
-  // }
   lane_segments_matrix.transposeInPlace();
   return {lane_segments_matrix.data(), lane_segments_matrix.data() + lane_segments_matrix.size()};
 }
@@ -148,15 +161,6 @@ std::vector<float> DiffusionPlanner::get_route_segments(
 
   Eigen::MatrixXf ego_centric_route_segments = transform_and_select_rows(
     full_route_segment_matrix, map_to_ego_transform, center_x, center_y, route_lanes_shape_[1]);
-
-  // std::cerr << " ego_centric_route_segments\n";
-  // for (long i = 0; i < ego_centric_route_segments.rows(); ++i) {
-  //   for (long j = 0; j < ego_centric_route_segments.cols(); ++j) {
-  //     std::cerr << ego_centric_route_segments(i, j) << " ";
-  //   }
-  //   std::cerr << std::endl;
-  // }
-
   const auto total_route_points = route_lanes_shape_[1] * NUM_LANE_POINTS;
   Eigen::MatrixXf route_segments_matrix(total_route_points, LANE_POINT_DIM);
   route_segments_matrix.block(0, 0, total_route_points, LANE_POINT_DIM) =
@@ -224,7 +228,6 @@ MarkerArray DiffusionPlanner::create_route_marker(
   //   long index = ((b * L + l) * P + p) * D + d;
   //   return route_vector[index];
   // };
-  std::cerr << "route_vector.size() / (20 * 12) " << route_vector.size() / (20 * 12) << "\n";
   for (size_t l = 0; l < route_vector.size() / (20 * 12); ++l) {
     // Check if the centerline is all zeros
     Marker marker;
@@ -293,18 +296,11 @@ InputDataMap DiffusionPlanner::create_input_data()
   // TODO(Daniel): use vehicle_info_utils
   EgoState ego_state(*ego_kinematic_state, *ego_acceleration, 5.0);
   input_data_map["ego_current_state"] = ego_state.as_array();
-  std::cerr << "ego state before norm, size " << ego_state.as_array().size() << "\n";
-  for (auto elem : ego_state.as_array()) {
-    std::cerr << elem << ", ";
-  }
-  std::cerr << "\n";
-
   // Agent data on ego reference frame
   transforms_ = get_transform_matrix(*ego_kinematic_state);
   auto map_to_ego_transform = transforms_.second;
   auto ego_centric_data = get_ego_centric_agent_data(*objects, map_to_ego_transform);
   input_data_map["neighbor_agents_past"] = ego_centric_data.as_vector();
-  // auto B = neighbor_agents_past_shape_[0];
   // Static objects
   // TODO(Daniel): add static objects
   auto static_objects = create_float_data(static_objects_shape_, 0.0f);
@@ -326,25 +322,6 @@ InputDataMap DiffusionPlanner::create_input_data()
       key + ".bin");
   };
 
-  // input_data_map["lanes"] = get_pythorch_tensor("lanes");
-
-  // auto N = lanes_shape_[1];
-  // auto T = lanes_shape_[2];
-  // auto D = lanes_shape_[3];
-  // std::cerr << "lane data in vector form\n";
-  // for (long n = 0; n < N; ++n) {
-  //   for (long t = 0; t < T; ++t) {
-  //     std::cerr << "[";
-  //     for (long d = 0; d < D; ++d) {
-  //       auto val = input_data_map["lanes"][(T * D) * n + (D)*t + d];
-  //       std::cerr << val << ",";
-  //     }
-  //     std::cerr << "]\n";
-  //   }
-  //   std::cerr << "\n";
-  // }
-  // std::cerr << "\n";
-
   auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
   input_data_map["lanes_speed_limit"] = lane_speed_data;
 
@@ -352,29 +329,6 @@ InputDataMap DiffusionPlanner::create_input_data()
   auto route_segments = get_route_segments(map_to_ego_transform, center_x, center_y);
   input_data_map["route_lanes"] = route_segments;
 
-  auto N = route_lanes_shape_[1];
-  auto T = route_lanes_shape_[2];
-  auto D = route_lanes_shape_[3];
-  std::cerr << "lane data in vector form\n";
-  for (long n = 0; n < N; ++n) {
-    for (long t = 0; t < T; ++t) {
-      std::cerr << "[";
-      for (long d = 0; d < D; ++d) {
-        auto val = input_data_map["route_lanes"][(T * D) * n + (D)*t + d];
-        std::cerr << val << ",";
-      }
-      std::cerr << "]\n";
-    }
-    std::cerr << "\n";
-  }
-  std::cerr << "\n";
-
-  auto route_markers = create_route_marker(
-    route_segments, route_lanes_shape_, this->now(), {0.1, 0.8, 0.0, 0.8}, "base_link");
-  pub_route_marker_->publish(route_markers);
-
-  // normalization of data
-  normalize_input_data(input_data_map);
   return input_data_map;
 }
 
@@ -389,12 +343,7 @@ Trajectory DiffusionPlanner::create_trajectory(
   auto data = predictions[0].GetTensorMutableData<float>();
   const auto prediction_shape = predictions[0].GetTensorTypeAndShapeInfo().GetShape();
   const auto num_of_dimensions = prediction_shape.size();
-  for (auto & dim : prediction_shape) {
-    std::cerr << "Prediction shape: " << dim << " ";
-  }
-  std::cerr << std::endl;
-  // const auto num_points_in_one_mode =
-  //   prediction_shape[num_of_dimensions - 1] * prediction_shape[num_of_dimensions - 2];
+
   // copy relevant part of data to Eigen matrix
   auto rows = prediction_shape[num_of_dimensions - 2];
   auto cols = prediction_shape[num_of_dimensions - 1];
@@ -407,16 +356,6 @@ Trajectory DiffusionPlanner::create_trajectory(
 
   // Copy only the relevant part
   prediction_matrix = mapped_data;  // Copies first rows*cols elements row-wise
-
-  // print matrix for debugging
-  // std::cerr << "Prediction matrix:\n";
-  // for (long i = 0; i < prediction_matrix.rows(); ++i) {
-  //   for (long j = 0; j < prediction_matrix.cols(); ++j) {
-  //     std::cerr << prediction_matrix(i, j) << " ";
-  //   }
-  //   std::cerr << std::endl;
-  // }
-
   prediction_matrix.transposeInPlace();
   transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
   transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
@@ -465,25 +404,22 @@ void DiffusionPlanner::on_timer()
     return;
   }
 
+  if (debug_params_.publish_debug_route) {
+    auto route_markers = create_route_marker(
+      input_data_map["route_lanes"], route_lanes_shape_, this->now(), {0.1, 0.8, 0.0, 0.8},
+      "base_link");
+    pub_route_marker_->publish(route_markers);
+  }
+
+  // normalization of data
+  normalize_input_data(input_data_map);
+
   auto ego_current_state = input_data_map["ego_current_state"];
   auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
   auto static_objects = input_data_map["static_objects"];
   auto lanes = input_data_map["lanes"];
   auto lanes_speed_limit = input_data_map["lanes_speed_limit"];
   auto route_lanes = input_data_map["route_lanes"];
-
-  // auto ego_current_state = get_pythorch_tensor("ego_current_state");
-  // auto neighbor_agents_past = get_pythorch_tensor("neighbor_agents_past");
-  // auto static_objects = get_pythorch_tensor("static_objects");
-  // auto lanes = get_pythorch_tensor("lanes");
-  // auto lanes_speed_limit = get_pythorch_tensor("lanes_speed_limit");
-
-  // std::cerr << "input_data_map[lanes_speed_limit]\n";
-  // for (auto & val : input_data_map["lanes_speed_limit"]) {
-  //   std::cerr << val << "\n";
-  // }
-
-  // auto route_lanes = get_pythorch_tensor("route_lanes");
 
   // Allocate raw memory for bool array
   size_t lane_speed_tensor_num_elements = std::accumulate(
@@ -529,11 +465,9 @@ void DiffusionPlanner::on_timer()
 
   const char * output_names[] = {"output"};
   // run inference
-  std::cerr << "Running inference..." << std::endl;
   try {
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
-
     auto output_trajectory = create_trajectory(output, transforms_.first);
     pub_trajectory_->publish(output_trajectory);
   } catch (const Ort::Exception & e) {
@@ -543,7 +477,6 @@ void DiffusionPlanner::on_timer()
 
 void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
 {
-  std::cerr << "Received map message" << std::endl;
   lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
   lanelet::utils::conversion::fromBinMsg(
     *map_msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
@@ -560,20 +493,6 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     lane_segments_, segment_row_indices_, 0.0, 0.0, 100000000.0);
 
   is_map_loaded_ = true;
-  // std::cerr << "Lane segments matrix: " << map_lane_segments_matrix_.rows() << "x"
-  //           << map_lane_segments_matrix_.cols() << std::endl;
-
-  // for (long i = 0; i < map_lane_segments_matrix_.rows(); ++i) {
-  //   for (long j = 0; j < map_lane_segments_matrix_.cols(); ++j) {
-  //     std::cerr << map_lane_segments_matrix_(i, j) << " ";
-  //   }
-  //   std::cerr << std::endl;
-  // }
-}
-
-void DiffusionPlanner::on_parameter(
-  [[maybe_unused]] const std::vector<rclcpp::Parameter> & parameters)
-{
 }
 
 }  // namespace autoware::diffusion_planner
