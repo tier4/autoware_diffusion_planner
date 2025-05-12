@@ -3,3 +3,6 @@
     onnx_model_path: ""
     args_path: ""
     planning_frequency_hz: 10.0
+    debug_params:
+      publish_debug_route: false
+      publish_debug_map: false

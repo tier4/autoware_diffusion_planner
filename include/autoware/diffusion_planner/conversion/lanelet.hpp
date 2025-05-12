@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <optional>
 #include <string>
 #include <utility>
@@ -297,23 +298,39 @@ struct RowWithDistance
 {
   long index;
   float distance_squared;
+  bool inside;
 };
 // Function to compute squared distances of each matrix of lane segments
 inline void compute_distances(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  std::vector<RowWithDistance> & distances)
+  std::vector<RowWithDistance> & distances, float center_x, float center_y,
+  float mask_range = 100.0)
 {
   const auto n = input_matrix.rows();
-  distances.clear();
   distances.reserve(n);
   for (long i = 0; i < n; i += LANE_POINTS) {
     // Directly access input matrix as raw memory
-    float x = input_matrix(i, 0);
-    float y = input_matrix(i, 1);
-    Eigen::Vector4f p(x, y, 0.0f, 1.0f);
-    Eigen::Vector4f p_transformed = transform_matrix * p;
-    float distance_squared = p_transformed.head<2>().squaredNorm();
-    distances.push_back({i, distance_squared});
+    float x = input_matrix.block(i, 0, LANE_POINTS, 1).mean();
+    float y = input_matrix.block(i, 1, LANE_POINTS, 1).mean();
+    bool inside =
+      (x > center_x - mask_range * 1.1 && x < center_x + mask_range * 1.1 &&
+       y > center_y - mask_range * 1.1 && y < center_y + mask_range * 1.1);
+    float x_first = input_matrix(i, 0);
+    float y_first = input_matrix(i, 1);
+
+    float x_last = input_matrix(i + LANE_POINTS - 1, 0);
+    float y_last = input_matrix(i + LANE_POINTS - 1, 1);
+
+    Eigen::Vector4f p_first(x_first, y_first, 0.0f, 1.0f);
+    Eigen::Vector4f p_transformed_first = transform_matrix * p_first;
+    float distance_squared_first = p_transformed_first.head<2>().squaredNorm();
+
+    Eigen::Vector4f p_last(x_last, y_last, 0.0f, 1.0f);
+    Eigen::Vector4f p_transformed_last = transform_matrix * p_last;
+    float distance_squared_last = p_transformed_last.head<2>().squaredNorm();
+
+    float distance_squared = std::min(distance_squared_last, distance_squared_first);
+    distances.push_back({i, distance_squared, inside});
   }
 }
 
@@ -356,8 +373,12 @@ inline Eigen::MatrixXf transform_xy_points(
   output_matrix.transposeInPlace();  // helps to simplify the code below
 
   long col_counter = 0;
-  for (auto itr = distances.begin(), end = distances.begin() + num_segments; itr != end; ++itr) {
+  long added_segments = 0;
+  for (auto itr = distances.begin(), end = distances.end(); itr != end; ++itr) {
     // get the 20 rows corresponding to the segment
+    if (!itr->inside) {
+      continue;
+    }
     const auto row_idx = itr->index;
 
     output_matrix.block<n_columns, LANE_POINTS>(0, col_counter * LANE_POINTS) =
@@ -370,12 +391,23 @@ inline Eigen::MatrixXf transform_xy_points(
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 4);
     transform_selected_cols(transform_matrix, output_matrix, col_counter, 6);
     ++col_counter;
+    ++added_segments;
+    if (added_segments >= num_segments) {
+      break;
+    }
   }
+  // subtract center from boundaries
+  output_matrix.row(4) = output_matrix.row(4) - output_matrix.row(0);
+  output_matrix.row(5) = output_matrix.row(5) - output_matrix.row(1);
+  output_matrix.row(6) = output_matrix.row(6) - output_matrix.row(0);
+  output_matrix.row(7) = output_matrix.row(7) - output_matrix.row(1);
+
   return output_matrix.transpose();
 }
 
 inline Eigen::MatrixXf transform_and_select_rows(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, long m)
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, float center_x,
+  float center_y, long m)
 {
   const auto n = input_matrix.rows();
   if (n == 0 || input_matrix.cols() != 14 || m <= 0) {
@@ -385,7 +417,7 @@ inline Eigen::MatrixXf transform_and_select_rows(
   }
   std::vector<RowWithDistance> distances;
   // Step 1: Compute distances
-  compute_distances(input_matrix, transform_matrix, distances);
+  compute_distances(input_matrix, transform_matrix, distances, center_x, center_y, 100);
   // Step 2: Sort indices by distance
   sort_indices_by_distance(distances);
   // Step 3: Apply transformation to selected rows

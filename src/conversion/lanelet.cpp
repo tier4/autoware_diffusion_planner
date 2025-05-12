@@ -15,6 +15,7 @@
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
 
 #include "autoware/diffusion_planner/polyline.hpp"
+#include "autoware_utils_math/unit_conversion.hpp"
 
 #include <autoware_lanelet2_extension/regulatory_elements/Forward.hpp>
 
@@ -165,7 +166,6 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
     std::vector<BoundarySegment> left_boundary_segments;
     std::vector<BoundarySegment> right_boundary_segments;
     // TODO (Daniel avoid unnecessary copy and creation)
-    // TODO(Daniel): magic number num points
     auto points = fromLinestring(lanelet.centerline3d());
     lane_polyline.assign_waypoints(interpolate_points(points, LANE_POINTS));
     const auto left_bound = lanelet.leftBound3d();
@@ -177,13 +177,12 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments() const
     right_boundary_segments.emplace_back(
       MapType::Unused, interpolate_points(right_points, LANE_POINTS));
 
-    constexpr float kph2mph = 0.621371;
     const auto & attrs = lanelet.attributes();
     bool is_intersection = attrs.find("turn_direction") != attrs.end();
-    std::optional<float> speed_limit_mph =
-      attrs.find("speed_limit") != attrs.end()
-        ? std::make_optional(std::stof(attrs.at("speed_limit").value()) * kph2mph)
-        : std::nullopt;
+    std::optional<float> speed_limit_mph = attrs.find("speed_limit") != attrs.end()
+                                             ? std::make_optional(autoware_utils_math::kmph2mps(
+                                                 std::stof(attrs.at("speed_limit").value())))
+                                             : std::nullopt;
 
     // TODO(Daniel): get proper light state, use behavior_velocity_traffic_light module as guide.
     auto traffic_light = TrafficLightElement::UNKNOWN;

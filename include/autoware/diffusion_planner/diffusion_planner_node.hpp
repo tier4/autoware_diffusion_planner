@@ -20,6 +20,8 @@
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
+#include "builtin_interfaces/msg/duration.hpp"
+#include "builtin_interfaces/msg/time.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 #include <Eigen/Dense>
@@ -30,7 +32,11 @@
 #include <rclcpp/timer.hpp>
 
 #include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/point.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "std_msgs/msg/color_rgba.hpp"
+#include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 #include <autoware_map_msgs/msg/detail/lanelet_map_bin__struct.hpp>
 #include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
 #include <autoware_perception_msgs/msg/detail/tracked_objects__struct.hpp>
@@ -64,6 +70,13 @@ using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
 using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
+using builtin_interfaces::msg::Duration;
+using builtin_interfaces::msg::Time;
+using geometry_msgs::msg::Point;
+using rcl_interfaces::msg::SetParametersResult;
+using std_msgs::msg::ColorRGBA;
+using visualization_msgs::msg::Marker;
+using visualization_msgs::msg::MarkerArray;
 
 std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
   const nav_msgs::msg::Odometry & msg)
@@ -110,8 +123,8 @@ struct DiffusionPlannerParams
 };
 struct DiffusionPlannerDebugParams
 {
-  bool enable_debug;
-  bool enable_processing_time_detail;
+  bool publish_debug_route{false};
+  bool publish_debug_map{false};
 };
 
 std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 0.1f)
@@ -129,8 +142,8 @@ public:
   void set_up_params();
   void on_timer();
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
-  void on_parameter(const std::vector<rclcpp::Parameter> & parameters);
   void load_model(const std::string & model_path);
+  SetParametersResult on_parameter(const std::vector<rclcpp::Parameter> & parameters);
 
   // preprocessing
   std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
@@ -139,7 +152,8 @@ public:
   std::vector<float> extract_ego_centric_lane_segments(
     const Eigen::MatrixXf & ego_centric_lane_segments);
   std::vector<float> extract_lane_speeds(const Eigen::MatrixXf & ego_centric_lane_segments);
-  std::vector<float> get_route_segments(const Eigen::Matrix4f & map_to_ego_transform);
+  std::vector<float> get_route_segments(
+    const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y);
 
   InputDataMap create_input_data();
   void normalize_input_data(InputDataMap & input_data_map);
@@ -147,6 +161,12 @@ public:
   // postprocessing
   Trajectory create_trajectory(
     std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map);
+
+  // debugging
+  MarkerArray create_lane_marker(
+    const std::vector<float> & lane_vector, const std::vector<long> & shape, const Time & stamp,
+    const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
+    const std::string & ns = "base_link");
 
   inline void transform_output_matrix(
     const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
@@ -191,6 +211,7 @@ public:
   std::optional<AgentData> agent_data_{std::nullopt};
 
   // Node parameters
+  OnSetParametersCallbackHandle::SharedPtr set_param_res_;
   DiffusionPlannerParams params_;
   DiffusionPlannerDebugParams debug_params_;
   NormalizationMap normalization_map_;
@@ -211,6 +232,8 @@ public:
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
   rclcpp::Publisher<Trajectory>::SharedPtr pub_trajectory_{nullptr};
+  rclcpp::Publisher<MarkerArray>::SharedPtr pub_lane_marker_{nullptr};
+  rclcpp::Publisher<MarkerArray>::SharedPtr pub_route_marker_{nullptr};
   mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
   autoware_utils::InterProcessPollingSubscriber<Odometry> sub_current_odometry_{
     this, "~/input/odometry"};
@@ -231,5 +254,23 @@ public:
   tf2_ros::Buffer tf_buffer_{get_clock()};
   tf2_ros::TransformListener tf_listener_{tf_buffer_};
 };
+
+std::vector<float> load_tensor(const std::string & filename)
+{
+  std::ifstream file(filename, std::ios::binary);
+  if (!file) {
+    throw std::runtime_error("Failed to open file: " + filename);
+  }
+
+  file.seekg(0, std::ios::end);
+  std::streamsize size = file.tellg();
+  if (size % sizeof(float) != 0)
+    throw std::runtime_error("File size is not aligned with float size");
+
+  file.seekg(0, std::ios::beg);
+  std::vector<float> buffer(size / sizeof(float));
+  file.read(reinterpret_cast<char *>(buffer.data()), size);
+  return buffer;
+}
 }  // namespace autoware::diffusion_planner
 #endif  // AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_HPP_
