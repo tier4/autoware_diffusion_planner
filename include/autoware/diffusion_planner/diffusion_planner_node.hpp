@@ -163,9 +163,10 @@ public:
     std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map);
 
   // debugging
-  MarkerArray create_route_marker(
-    const std::vector<float> & route_vector, const std::vector<long> & shape, const Time & stamp,
-    const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f}, std::string ns = "base_link");
+  MarkerArray create_lane_marker(
+    const std::vector<float> & lane_vector, const std::vector<long> & shape, const Time & stamp,
+    const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
+    const std::string & ns = "base_link");
 
   inline void transform_output_matrix(
     const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,

@@ -23,6 +23,7 @@
 #include <Eigen/src/Core/Matrix.h>
 
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -210,63 +211,83 @@ void DiffusionPlanner::normalize_input_data(InputDataMap & input_data_map)
   }
 }
 
-MarkerArray DiffusionPlanner::create_route_marker(
-  const std::vector<float> & route_vector, [[maybe_unused]] const std::vector<long> & shape,
-  const Time & stamp, const std::array<float, 4> colors, std::string ns)
+MarkerArray DiffusionPlanner::create_lane_marker(
+  const std::vector<float> & lane_vector, [[maybe_unused]] const std::vector<long> & shape,
+  const Time & stamp, const std::array<float, 4> colors, const std::string & ns)
 {
   MarkerArray marker_array;
-  // const long B = shape[0];  // batch size (should be 1)
-  // const long L = shape[1];  // number of lanes = 25
-  // const long P = 20;        // number of points = 20
-  // const long D = 14;        // features per point = 12
+  const long P = shape[2];
+  const long D = shape[3];
+  long sphere_count = 0;
 
-  // if (B != 1) {
-  //   throw std::runtime_error("Only batch size of 1 is supported.");
-  // }
+  ColorRGBA color;
+  color.r = colors[0];
+  color.g = colors[1];
+  color.b = colors[2];
+  color.a = colors[3];
 
-  // auto get_value = [&](long b, long l, long p, long d) -> float {
-  //   long index = ((b * L + l) * P + p) * D + d;
-  //   return route_vector[index];
-  // };
-  for (size_t l = 0; l < route_vector.size() / (20 * 12); ++l) {
+  Duration lifetime;
+  lifetime.sec = 0;
+  lifetime.nanosec = 1e8;
+
+  for (size_t l = 0; l < lane_vector.size() / (P * D); ++l) {
     // Check if the centerline is all zeros
     Marker marker;
     marker.header.stamp = stamp;
     marker.header.frame_id = ns;
-    marker.ns = "route";
+    marker.ns = "lane";
     marker.id = static_cast<int>(l);
     marker.type = Marker::LINE_STRIP;
     marker.action = Marker::ADD;
     marker.pose.orientation.w = 1.0;
-    marker.scale.x = 0.6;
-
-    ColorRGBA color;
-    color.r = colors[0];
-    color.g = colors[1];
-    color.b = colors[2];
-    color.a = colors[3];
+    marker.scale.x = 0.3;
     marker.color = color;
-
-    Duration lifetime;
-    lifetime.sec = 1;
-    lifetime.nanosec = 0;
     marker.lifetime = lifetime;
 
-    for (long p = 0; p < 20; ++p) {
-      auto x = route_vector[20 * l + p * 12 + 0];
-      auto y = route_vector[20 * l + p * 12 + 1];
+    Marker marker_sphere;
+    marker_sphere.header.stamp = stamp;
+    marker_sphere.header.frame_id = ns;
+    marker_sphere.ns = "sphere";
+    marker_sphere.id = static_cast<int>(l);
+    marker_sphere.type = Marker::SPHERE_LIST;
+    marker_sphere.action = Marker::ADD;
+    marker_sphere.pose.orientation.w = 1.0;
+    marker_sphere.scale.x = 0.5;
+    marker_sphere.scale.y = 0.5;
+    marker_sphere.scale.z = 0.5;
+    marker_sphere.lifetime = lifetime;
+
+    ColorRGBA color_sphere;
+    color_sphere.r = sphere_count % 2 == 0 ? 0.1 : 0.9;
+    color_sphere.g = sphere_count % 2 == 0 ? 0.9 : 0.1;
+    color_sphere.b = 0.0;
+    color_sphere.a = 0.8;
+    marker_sphere.color = color_sphere;
+
+    for (long p = 0; p < P; ++p) {
+      auto x = lane_vector[P * D * l + p * D + 0];
+      auto y = lane_vector[P * D * l + p * D + 1];
       float z = 0.5f;
-      float norm = std::sqrt(x * x + y * y + z * z);
-      if (norm < 2.0f) continue;
+      float norm = std::sqrt(x * x + y * y);
+      if (norm < 1e-2) continue;
 
       Point pt;
       pt.x = x;
       pt.y = y;
       pt.z = z;
-
       marker.points.push_back(pt);
-    }
 
+      Point pt_sphere;
+      pt_sphere.x = x;
+      pt_sphere.y = y;
+      pt_sphere.z = sphere_count % 2 == 0 ? 0.5 : 1.0;
+      marker_sphere.points.push_back(pt_sphere);
+    }
+    ++sphere_count;
+
+    if (!marker_sphere.points.empty()) {
+      marker_array.markers.push_back(marker_sphere);
+    }
     if (!marker.points.empty()) {
       marker_array.markers.push_back(marker);
     }
@@ -314,14 +335,6 @@ InputDataMap DiffusionPlanner::create_input_data()
     map_lane_segments_matrix_, map_to_ego_transform, center_x, center_y, lanes_shape_[1]);
   auto lane_data = extract_ego_centric_lane_segments(ego_centric_lane_segments);
   input_data_map["lanes"] = lane_data;
-
-  [[maybe_unused]] auto get_pythorch_tensor = [](std::string key) {
-    return load_tensor(
-      "/home/danielsanchez/pilot-auto-new-framework/src/autoware/trajectory_generator/"
-      "autoware_diffusion_planner/data/" +
-      key + ".bin");
-  };
-
   auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
   input_data_map["lanes_speed_limit"] = lane_speed_data;
 
@@ -405,10 +418,16 @@ void DiffusionPlanner::on_timer()
   }
 
   if (debug_params_.publish_debug_route) {
-    auto route_markers = create_route_marker(
+    auto route_markers = create_lane_marker(
       input_data_map["route_lanes"], route_lanes_shape_, this->now(), {0.1, 0.8, 0.0, 0.8},
       "base_link");
     pub_route_marker_->publish(route_markers);
+  }
+
+  if (debug_params_.publish_debug_map) {
+    auto lane_markers = create_lane_marker(
+      input_data_map["lanes"], lanes_shape_, this->now(), {0.1, 0.1, 0.7, 0.8}, "base_link");
+    pub_lane_marker_->publish(lane_markers);
   }
 
   // normalization of data

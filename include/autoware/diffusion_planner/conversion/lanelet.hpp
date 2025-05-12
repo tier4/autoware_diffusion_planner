@@ -374,11 +374,9 @@ inline Eigen::MatrixXf transform_xy_points(
 
   long col_counter = 0;
   long added_segments = 0;
-  long skipped_segments = 0;
   for (auto itr = distances.begin(), end = distances.end(); itr != end; ++itr) {
     // get the 20 rows corresponding to the segment
     if (!itr->inside) {
-      ++skipped_segments;
       continue;
     }
     const auto row_idx = itr->index;
