@@ -96,19 +96,19 @@ struct AgentState
   static size_t dim() { return AGENT_STATE_DIM; }
 
   // Return the x position.
-  [[nodiscard]] float x() const { return position_.x; }
+  [[nodiscard]] float x() const { return static_cast<float>(position_.x); }
 
   // Return the y position.
-  [[nodiscard]] float y() const { return position_.y; }
+  [[nodiscard]] float y() const { return static_cast<float>(position_.y); }
 
   // Return the z position.
-  [[nodiscard]] float z() const { return position_.z; }
+  [[nodiscard]] float z() const { return static_cast<float>(position_.z); }
 
   // Return the length of object size.
-  [[nodiscard]] float length() const { return dimension_.x; }
+  [[nodiscard]] float length() const { return static_cast<float>(dimension_.x); }
 
   // Return the width of object size.
-  [[nodiscard]] float width() const { return dimension_.y; }
+  [[nodiscard]] float width() const { return static_cast<float>(dimension_.y); }
 
   // Return the cos of yaw.
   [[nodiscard]] float cos_yaw() const { return cos_yaw_; }
@@ -117,10 +117,10 @@ struct AgentState
   [[nodiscard]] float sin_yaw() const { return sin_yaw_; }
 
   // Return the x velocity.
-  [[nodiscard]] float vx() const { return velocity_.x; }
+  [[nodiscard]] float vx() const { return static_cast<float>(velocity_.x); }
 
   // Return the y velocity.
-  [[nodiscard]] float vy() const { return velocity_.y; }
+  [[nodiscard]] float vy() const { return static_cast<float>(velocity_.y); }
 
   void apply_transform(const Eigen::Matrix4f & transform);
 
@@ -295,9 +295,6 @@ struct AgentData
 
   // Return the number of all elements `N*T*D`.
   size_t size() const { return num_agent_ * time_length_ * state_dim(); }
-
-  // Return the number of state dimensions of MTR input `T+C+D+3`.
-  size_t input_dim() const { return time_length_ + state_dim() + num_class() + 3; }
 
   // Return the data shape ordering in (N, T, D).
   std::tuple<size_t, size_t, size_t> shape() const

@@ -19,6 +19,7 @@ include_directories(
 
 ament_auto_add_library(autoware_diffusion_planner_component SHARED
   src/diffusion_planner_node.cpp
+  src/preprocessing/lane_segments.cpp
   src/conversion/lanelet.cpp
   src/conversion/agent.cpp
   src/conversion/ego.cpp

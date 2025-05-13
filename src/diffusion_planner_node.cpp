@@ -16,6 +16,7 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/ego.hpp"
+#include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
 #include "onnxruntime_cxx_api.h"
 
 #include <autoware_utils/math/normalization.hpp>
@@ -124,7 +125,7 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
 std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
   const Eigen::MatrixXf & ego_centric_lane_segments)
 {
-  const auto total_lane_points = lanes_shape_[1] * NUM_LANE_POINTS;
+  const auto total_lane_points = lanes_shape_[1] * POINTS_PER_LANE_SEGMENT;
   Eigen::MatrixXf lane_segments_matrix(total_lane_points, LANE_POINT_DIM);
   lane_segments_matrix.block(0, 0, total_lane_points, LANE_POINT_DIM) =
     ego_centric_lane_segments.block(0, 0, total_lane_points, LANE_POINT_DIM);
@@ -147,22 +148,23 @@ std::vector<float> DiffusionPlanner::get_route_segments(
   const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y)
 {
   Eigen::MatrixXf full_route_segment_matrix(
-    NUM_LANE_POINTS * route_ptr_->segments.size(), LANE_MATRIX_DIM);
+    POINTS_PER_LANE_SEGMENT * route_ptr_->segments.size(), LANE_MATRIX_DIM);
   long route_segment_rows = 0;
   for (const auto & route_segment : route_ptr_->segments) {
     auto route_segment_row_itr = segment_row_indices_.find(route_segment.preferred_primitive.id);
     if (route_segment_row_itr == segment_row_indices_.end()) {
       continue;
     }
-    full_route_segment_matrix.block(route_segment_rows, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM) =
+    full_route_segment_matrix.block(
+      route_segment_rows, 0, POINTS_PER_LANE_SEGMENT, LANE_MATRIX_DIM) =
       map_lane_segments_matrix_.block(
-        route_segment_row_itr->second, 0, NUM_LANE_POINTS, LANE_MATRIX_DIM);
-    route_segment_rows += NUM_LANE_POINTS;
+        route_segment_row_itr->second, 0, POINTS_PER_LANE_SEGMENT, LANE_MATRIX_DIM);
+    route_segment_rows += POINTS_PER_LANE_SEGMENT;
   }
 
   Eigen::MatrixXf ego_centric_route_segments = transform_and_select_rows(
     full_route_segment_matrix, map_to_ego_transform, center_x, center_y, route_lanes_shape_[1]);
-  const auto total_route_points = route_lanes_shape_[1] * NUM_LANE_POINTS;
+  const auto total_route_points = route_lanes_shape_[1] * POINTS_PER_LANE_SEGMENT;
   Eigen::MatrixXf route_segments_matrix(total_route_points, LANE_POINT_DIM);
   route_segments_matrix.block(0, 0, total_route_points, LANE_POINT_DIM) =
     ego_centric_route_segments.block(0, 0, total_route_points, LANE_POINT_DIM);
@@ -501,15 +503,15 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     *map_msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 
   lanelet_converter_ptr_ = std::make_unique<LaneletConverter>(lanelet_map_ptr_, 100, 20, 100.0);
-  lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments();
+  lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments(POINTS_PER_LANE_SEGMENT);
 
   if (lane_segments_.empty()) {
     RCLCPP_WARN(get_logger(), "No lane segments found in the map");
     throw std::runtime_error("No lane segments found in the map");
   }
 
-  map_lane_segments_matrix_ = lanelet_converter_ptr_->process_segments_to_matrix(
-    lane_segments_, segment_row_indices_, 0.0, 0.0, 100000000.0);
+  map_lane_segments_matrix_ =
+    process_segments_to_matrix(lane_segments_, segment_row_indices_, 0.0, 0.0, 100000000.0);
 
   is_map_loaded_ = true;
 }

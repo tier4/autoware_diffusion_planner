@@ -191,7 +191,6 @@ public:
   Ort::AllocatorWithDefaultOptions allocator_;
 
   // Model input shapes
-  static constexpr long NUM_LANE_POINTS = 20;
   static constexpr long LANE_POINT_DIM = 12;
   static constexpr long LANE_MATRIX_DIM = 14;
   static constexpr long OUTPUT_T = 80;
