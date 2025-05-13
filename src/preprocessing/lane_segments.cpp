@@ -22,30 +22,36 @@ void compute_distances(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   std::vector<RowWithDistance> & distances, float center_x, float center_y, float mask_range)
 {
-  const auto n = input_matrix.rows();
-  distances.reserve(n);
-  for (long i = 0; i < n; i += POINTS_PER_SEGMENT) {
+  const auto rows = input_matrix.rows();
+  if (rows % POINTS_PER_SEGMENT != 0) {
+    throw std::runtime_error("input matrix rows are not divisible by POINTS_PER_SEGMENT");
+  }
+
+  auto compute_squared_distance = [](float x, float y, const Eigen::Matrix4f & transform_matrix) {
+    Eigen::Vector4f p(x, y, 0.0f, 1.0f);
+    Eigen::Vector4f p_transformed = transform_matrix * p;
+    return p_transformed.head<2>().squaredNorm();
+  };
+  distances.clear();
+  distances.reserve(rows / POINTS_PER_SEGMENT);
+  for (long i = 0; i < rows; i += POINTS_PER_SEGMENT) {
     // Directly access input matrix as raw memory
     float x = input_matrix.block(i, 0, POINTS_PER_SEGMENT, 1).mean();
     float y = input_matrix.block(i, 1, POINTS_PER_SEGMENT, 1).mean();
     bool inside =
       (x > center_x - mask_range * 1.1 && x < center_x + mask_range * 1.1 &&
        y > center_y - mask_range * 1.1 && y < center_y + mask_range * 1.1);
-    float x_first = input_matrix(i, 0);
-    float y_first = input_matrix(i, 1);
 
-    float x_last = input_matrix(i + POINTS_PER_SEGMENT - 1, 0);
-    float y_last = input_matrix(i + POINTS_PER_SEGMENT - 1, 1);
+    const auto distance_squared = [&]() {
+      float x_first = input_matrix(i, X);
+      float y_first = input_matrix(i, Y);
+      float x_last = input_matrix(i + POINTS_PER_SEGMENT - 1, X);
+      float y_last = input_matrix(i + POINTS_PER_SEGMENT - 1, Y);
+      float distance_squared_first = compute_squared_distance(x_first, y_first, transform_matrix);
+      float distance_squared_last = compute_squared_distance(x_last, y_last, transform_matrix);
+      return std::min(distance_squared_last, distance_squared_first);
+    }();
 
-    Eigen::Vector4f p_first(x_first, y_first, 0.0f, 1.0f);
-    Eigen::Vector4f p_transformed_first = transform_matrix * p_first;
-    float distance_squared_first = p_transformed_first.head<2>().squaredNorm();
-
-    Eigen::Vector4f p_last(x_last, y_last, 0.0f, 1.0f);
-    Eigen::Vector4f p_transformed_last = transform_matrix * p_last;
-    float distance_squared_last = p_transformed_last.head<2>().squaredNorm();
-
-    float distance_squared = std::min(distance_squared_last, distance_squared_first);
     distances.push_back({i, distance_squared, inside});
   }
 }
