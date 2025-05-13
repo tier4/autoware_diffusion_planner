@@ -24,9 +24,24 @@
 namespace autoware::diffusion_planner::utils
 {
 
+/**
+ * @brief Generates transformation matrices from an odometry message.
+ *
+ * @param msg Odometry message containing position and orientation data.
+ * @return A pair of 4x4 transformation matrices:
+ *         - The first matrix represents the transformation from the map frame to the ego frame.
+ *         - The second matrix represents the inverse transformation (ego frame to map frame).
+ */
 std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
   const nav_msgs::msg::Odometry & msg);
 
+/**
+ * @brief Creates a vector of floats initialized with a specific value.
+ *
+ * @param shape A vector specifying the dimensions of the data (e.g., rows, columns).
+ * @param fill The value to initialize the vector with. Defaults to 0.1f.
+ * @return A flattened vector of floats with the specified shape and initialized values.
+ */
 std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 0.1f);
 
 }  // namespace autoware::diffusion_planner::utils

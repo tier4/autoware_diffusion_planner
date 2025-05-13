@@ -279,9 +279,10 @@ Trajectory DiffusionPlanner::create_trajectory(
   transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
   prediction_matrix.transposeInPlace();
 
-  constexpr float dt = 0.1f;
-  float prev_x = 0.f;
-  float prev_y = 0.f;
+  // TODO(Daniel): check there is no issue with the speed of 1st point (index 0)
+  constexpr double dt = 0.1f;
+  double prev_x = 0.;
+  double prev_y = 0.;
   for (long row = 0; row < prediction_matrix.rows(); ++row) {
     TrajectoryPoint p;
     p.pose.position.x = prediction_matrix(row, 0);
@@ -290,8 +291,8 @@ Trajectory DiffusionPlanner::create_trajectory(
     auto yaw = std::atan2(prediction_matrix(row, 3), prediction_matrix(row, 2));
     yaw = static_cast<float>(autoware_utils::normalize_radian(yaw));
     p.pose.orientation = autoware_utils::create_quaternion_from_yaw(yaw);
-    auto distance = std::hypotf(p.pose.position.x - prev_x, p.pose.position.y - prev_y);
-    p.longitudinal_velocity_mps = distance / dt;
+    auto distance = std::hypot(p.pose.position.x - prev_x, p.pose.position.y - prev_y);
+    p.longitudinal_velocity_mps = static_cast<float>(distance / dt);
 
     prev_x = p.pose.position.x;
     prev_y = p.pose.position.y;
