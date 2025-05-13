@@ -18,11 +18,24 @@
 #include <array>
 #include <vector>
 
-constexpr long POINTS_PER_LANE_SEGMENT = 20;  //!< Number of points in each lane segment.
-constexpr long SEGMENT_POINT_DIM = 12;        // Dimension of a lane segment point
+constexpr long SEGMENT_POINT_DIM = 12;   // Dimension of a lane segment point
+constexpr long POINTS_PER_SEGMENT = 20;  //!< Number of points in each lane segment.
 // Number of columns in a segment matrix
 // (X,Y,dX,dY,LeftBoundX,LeftBoundY,RightBoundX,RightBoundX,TrafficLightEncoding(Dim4),Speed Limit)
 constexpr long FULL_MATRIX_COLS = 14;
+// Index for each field
+constexpr long X = 0;
+constexpr long Y = 1;
+constexpr long dX = 2;
+constexpr long dY = 3;
+constexpr long LB_X = 4;
+constexpr long LB_Y = 5;
+constexpr long RB_X = 6;
+constexpr long RB_Y = 7;
+constexpr long TRAFFIC_LIGHT = 8;
+constexpr long SPEED_LIMIT = 12;
+constexpr long LANE_ID = 13;
+
 static constexpr long OUTPUT_T = 80;  // Output timestamp number
 
 const std::vector<long> EGO_CURRENT_STATE_SHAPE = {1, 10};

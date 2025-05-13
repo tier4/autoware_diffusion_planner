@@ -402,7 +402,7 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     *map_msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 
   lanelet_converter_ptr_ = std::make_unique<LaneletConverter>(lanelet_map_ptr_, 100, 20, 100.0);
-  lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments(POINTS_PER_LANE_SEGMENT);
+  lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments(POINTS_PER_SEGMENT);
 
   if (lane_segments_.empty()) {
     RCLCPP_WARN(get_logger(), "No lane segments found in the map");
