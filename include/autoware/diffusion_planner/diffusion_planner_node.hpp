@@ -118,21 +118,6 @@ public:
     const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
     const std::string & ns = "base_link");
 
-  inline void transform_output_matrix(
-    const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
-    long row_idx, bool do_translation = true)
-  {
-    Eigen::Matrix<float, 4, OUTPUT_T> xy_block = Eigen::Matrix<float, 4, OUTPUT_T>::Zero();
-    xy_block.block<2, OUTPUT_T>(0, 0) =
-      output_matrix.block<2, OUTPUT_T>(row_idx, column_idx * OUTPUT_T);
-    xy_block.row(3) = do_translation ? Eigen::Matrix<float, 1, OUTPUT_T>::Ones()
-                                     : Eigen::Matrix<float, 1, OUTPUT_T>::Zero();
-
-    Eigen::Matrix<float, 4, OUTPUT_T> transformed_block = transform_matrix * xy_block;
-    output_matrix.block<2, OUTPUT_T>(row_idx, column_idx * OUTPUT_T) =
-      transformed_block.block<2, OUTPUT_T>(0, 0);
-  };
-
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
   Ort::Env env_;

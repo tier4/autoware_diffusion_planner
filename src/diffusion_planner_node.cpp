@@ -16,6 +16,7 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/ego.hpp"
+#include "autoware/diffusion_planner/posprocessing/posprocessing_utils.hpp"
 #include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
 #include "autoware/diffusion_planner/preprocessing/preprocessing_utils.hpp"
 #include "autoware/diffusion_planner/utils/utils.hpp"
@@ -275,8 +276,8 @@ Trajectory DiffusionPlanner::create_trajectory(
   // Copy only the relevant part
   prediction_matrix = mapped_data;  // Copies first rows*cols elements row-wise
   prediction_matrix.transposeInPlace();
-  transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
-  transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+  posprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
+  posprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
   prediction_matrix.transposeInPlace();
 
   // TODO(Daniel): check there is no issue with the speed of 1st point (index 0)
