@@ -110,8 +110,7 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
   const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform)
 {
   if (!agent_data_) {
-    agent_data_ =
-      AgentData(objects, neighbor_agents_past_shape_[1], neighbor_agents_past_shape_[2]);
+    agent_data_ = AgentData(objects, NEIGHBOR_SHAPE[1], NEIGHBOR_SHAPE[2]);
   } else {
     agent_data_->update_histories(objects);
   }
@@ -125,10 +124,10 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
 std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
   const Eigen::MatrixXf & ego_centric_lane_segments)
 {
-  const auto total_lane_points = lanes_shape_[1] * POINTS_PER_LANE_SEGMENT;
-  Eigen::MatrixXf lane_segments_matrix(total_lane_points, LANE_POINT_DIM);
-  lane_segments_matrix.block(0, 0, total_lane_points, LANE_POINT_DIM) =
-    ego_centric_lane_segments.block(0, 0, total_lane_points, LANE_POINT_DIM);
+  const auto total_lane_points = LANES_SHAPE[1] * POINTS_PER_LANE_SEGMENT;
+  Eigen::MatrixXf lane_segments_matrix(total_lane_points, SEGMENT_POINT_DIM);
+  lane_segments_matrix.block(0, 0, total_lane_points, SEGMENT_POINT_DIM) =
+    ego_centric_lane_segments.block(0, 0, total_lane_points, SEGMENT_POINT_DIM);
   lane_segments_matrix.transposeInPlace();
   return {lane_segments_matrix.data(), lane_segments_matrix.data() + lane_segments_matrix.size()};
 }
@@ -136,10 +135,10 @@ std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
 std::vector<float> DiffusionPlanner::extract_lane_speeds(
   const Eigen::MatrixXf & ego_centric_lane_segments)
 {
-  const auto total_lane_points = lanes_speed_limit_shape_[1];
-  Eigen::MatrixXf lane_segments_speed(total_lane_points, lanes_speed_limit_shape_[2]);
-  lane_segments_speed.block(0, 0, total_lane_points, lanes_speed_limit_shape_[2]) =
-    ego_centric_lane_segments.block(0, 12, total_lane_points, lanes_speed_limit_shape_[2]);
+  const auto total_lane_points = LANES_SPEED_LIMIT_SHAPE[1];
+  Eigen::MatrixXf lane_segments_speed(total_lane_points, LANES_SPEED_LIMIT_SHAPE[2]);
+  lane_segments_speed.block(0, 0, total_lane_points, LANES_SPEED_LIMIT_SHAPE[2]) =
+    ego_centric_lane_segments.block(0, 12, total_lane_points, LANES_SPEED_LIMIT_SHAPE[2]);
   lane_segments_speed.transposeInPlace();
   return {lane_segments_speed.data(), lane_segments_speed.data() + lane_segments_speed.size()};
 }
@@ -148,7 +147,7 @@ std::vector<float> DiffusionPlanner::get_route_segments(
   const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y)
 {
   Eigen::MatrixXf full_route_segment_matrix(
-    POINTS_PER_LANE_SEGMENT * route_ptr_->segments.size(), LANE_MATRIX_DIM);
+    POINTS_PER_LANE_SEGMENT * route_ptr_->segments.size(), FULL_MATRIX_COLS);
   long route_segment_rows = 0;
   for (const auto & route_segment : route_ptr_->segments) {
     auto route_segment_row_itr = segment_row_indices_.find(route_segment.preferred_primitive.id);
@@ -156,18 +155,18 @@ std::vector<float> DiffusionPlanner::get_route_segments(
       continue;
     }
     full_route_segment_matrix.block(
-      route_segment_rows, 0, POINTS_PER_LANE_SEGMENT, LANE_MATRIX_DIM) =
+      route_segment_rows, 0, POINTS_PER_LANE_SEGMENT, FULL_MATRIX_COLS) =
       map_lane_segments_matrix_.block(
-        route_segment_row_itr->second, 0, POINTS_PER_LANE_SEGMENT, LANE_MATRIX_DIM);
+        route_segment_row_itr->second, 0, POINTS_PER_LANE_SEGMENT, FULL_MATRIX_COLS);
     route_segment_rows += POINTS_PER_LANE_SEGMENT;
   }
 
-  Eigen::MatrixXf ego_centric_route_segments = transform_and_select_rows(
-    full_route_segment_matrix, map_to_ego_transform, center_x, center_y, route_lanes_shape_[1]);
-  const auto total_route_points = route_lanes_shape_[1] * POINTS_PER_LANE_SEGMENT;
-  Eigen::MatrixXf route_segments_matrix(total_route_points, LANE_POINT_DIM);
-  route_segments_matrix.block(0, 0, total_route_points, LANE_POINT_DIM) =
-    ego_centric_route_segments.block(0, 0, total_route_points, LANE_POINT_DIM);
+  Eigen::MatrixXf ego_centric_route_segments = preprocess::transform_and_select_rows(
+    full_route_segment_matrix, map_to_ego_transform, center_x, center_y, ROUTE_LANES_SHAPE[1]);
+  const auto total_route_points = ROUTE_LANES_SHAPE[1] * POINTS_PER_LANE_SEGMENT;
+  Eigen::MatrixXf route_segments_matrix(total_route_points, SEGMENT_POINT_DIM);
+  route_segments_matrix.block(0, 0, total_route_points, SEGMENT_POINT_DIM) =
+    ego_centric_route_segments.block(0, 0, total_route_points, SEGMENT_POINT_DIM);
   route_segments_matrix.transposeInPlace();
   return {
     route_segments_matrix.data(), route_segments_matrix.data() + route_segments_matrix.size()};
@@ -326,15 +325,15 @@ InputDataMap DiffusionPlanner::create_input_data()
   input_data_map["neighbor_agents_past"] = ego_centric_data.as_vector();
   // Static objects
   // TODO(Daniel): add static objects
-  auto static_objects = create_float_data(static_objects_shape_, 0.0f);
+  auto static_objects = create_float_data(STATIC_OBJECTS_SHAPE, 0.0f);
   input_data_map["static_objects"] = static_objects;
 
   // map data on ego reference frame
   const auto & center_x = ego_kinematic_state->pose.pose.position.x;
   const auto & center_y = ego_kinematic_state->pose.pose.position.y;
 
-  Eigen::MatrixXf ego_centric_lane_segments = transform_and_select_rows(
-    map_lane_segments_matrix_, map_to_ego_transform, center_x, center_y, lanes_shape_[1]);
+  Eigen::MatrixXf ego_centric_lane_segments = preprocess::transform_and_select_rows(
+    map_lane_segments_matrix_, map_to_ego_transform, center_x, center_y, LANES_SHAPE[1]);
   auto lane_data = extract_ego_centric_lane_segments(ego_centric_lane_segments);
   input_data_map["lanes"] = lane_data;
   auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
@@ -421,14 +420,14 @@ void DiffusionPlanner::on_timer()
 
   if (debug_params_.publish_debug_route) {
     auto route_markers = create_lane_marker(
-      input_data_map["route_lanes"], route_lanes_shape_, this->now(), {0.1, 0.8, 0.0, 0.8},
+      input_data_map["route_lanes"], ROUTE_LANES_SHAPE, this->now(), {0.1, 0.8, 0.0, 0.8},
       "base_link");
     pub_route_marker_->publish(route_markers);
   }
 
   if (debug_params_.publish_debug_map) {
     auto lane_markers = create_lane_marker(
-      input_data_map["lanes"], lanes_shape_, this->now(), {0.1, 0.1, 0.7, 0.8}, "base_link");
+      input_data_map["lanes"], LANES_SHAPE, this->now(), {0.1, 0.1, 0.7, 0.8}, "base_link");
     pub_lane_marker_->publish(lane_markers);
   }
 
@@ -444,8 +443,7 @@ void DiffusionPlanner::on_timer()
 
   // Allocate raw memory for bool array
   size_t lane_speed_tensor_num_elements = std::accumulate(
-    lanes_speed_limit_shape_.begin(), lanes_speed_limit_shape_.end(), 1,
-    std::multiplies<int64_t>());
+    LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<int64_t>());
   auto raw_speed_bool_array =
     std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
 
@@ -454,25 +452,25 @@ void DiffusionPlanner::on_timer()
   }
 
   auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, ego_current_state.data(), ego_current_state.size(), ego_current_state_shape_.data(),
-    ego_current_state_shape_.size());
+    mem_info, ego_current_state.data(), ego_current_state.size(), EGO_CURRENT_STATE_SHAPE.data(),
+    EGO_CURRENT_STATE_SHAPE.size());
   auto neighbor_agents_past_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, neighbor_agents_past.data(), neighbor_agents_past.size(),
-    neighbor_agents_past_shape_.data(), neighbor_agents_past_shape_.size());
+    mem_info, neighbor_agents_past.data(), neighbor_agents_past.size(), NEIGHBOR_SHAPE.data(),
+    NEIGHBOR_SHAPE.size());
   auto static_objects_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, static_objects.data(), static_objects.size(), static_objects_shape_.data(),
-    static_objects_shape_.size());
+    mem_info, static_objects.data(), static_objects.size(), STATIC_OBJECTS_SHAPE.data(),
+    STATIC_OBJECTS_SHAPE.size());
   auto lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes.data(), lanes.size(), lanes_shape_.data(), lanes_shape_.size());
+    mem_info, lanes.data(), lanes.size(), LANES_SHAPE.data(), LANES_SHAPE.size());
   auto lanes_speed_limit_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes_speed_limit.data(), lanes_speed_limit.size(), lanes_speed_limit_shape_.data(),
-    lanes_speed_limit_shape_.size());
+    mem_info, lanes_speed_limit.data(), lanes_speed_limit.size(), LANES_SPEED_LIMIT_SHAPE.data(),
+    LANES_SPEED_LIMIT_SHAPE.size());
   auto lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
     mem_info, raw_speed_bool_array.get(), lane_speed_tensor_num_elements,
-    lanes_has_speed_limit_shape_.data(), lanes_has_speed_limit_shape_.size());
+    LANE_HAS_SPEED_LIMIT_SHAPE.data(), LANE_HAS_SPEED_LIMIT_SHAPE.size());
   auto route_lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, route_lanes.data(), route_lanes.size(), route_lanes_shape_.data(),
-    route_lanes_shape_.size());
+    mem_info, route_lanes.data(), route_lanes.size(), ROUTE_LANES_SHAPE.data(),
+    ROUTE_LANES_SHAPE.size());
 
   Ort::Value input_tensors[] = {
     std::move(ego_current_state_tensor), std::move(neighbor_agents_past_tensor),
@@ -510,8 +508,8 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     throw std::runtime_error("No lane segments found in the map");
   }
 
-  map_lane_segments_matrix_ =
-    process_segments_to_matrix(lane_segments_, segment_row_indices_, 0.0, 0.0, 100000000.0);
+  map_lane_segments_matrix_ = preprocess::process_segments_to_matrix(
+    lane_segments_, segment_row_indices_, 0.0, 0.0, 100000000.0);
 
   is_map_loaded_ = true;
 }

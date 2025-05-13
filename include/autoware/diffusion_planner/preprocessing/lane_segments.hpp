@@ -16,6 +16,7 @@
 #define AUTOWARE__DIFFUSION_PLANNER__PREPROCESSING__LANE_SEGMENTS_HPP
 
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
+#include "autoware/diffusion_planner/dimensions.hpp"
 
 #include <autoware_perception_msgs/msg/traffic_light_group_array.hpp>
 #include <geometry_msgs/msg/detail/point__struct.hpp>
@@ -35,11 +36,8 @@
 #include <utility>
 #include <vector>
 
-namespace autoware::diffusion_planner
+namespace autoware::diffusion_planner::preprocess
 {
-constexpr long POINTS_PER_LANE_SEGMENT = 20;  //!< Number of points in each lane segment.
-constexpr long FULL_MATRIX_COLS = 14;         //!< Number of columns in the full matrix.
-
 /**
  * @brief Represents a row index with its associated distance and whether it is inside a mask range.
  */
@@ -146,6 +144,6 @@ Eigen::MatrixXf transform_xy_points(
 Eigen::MatrixXf transform_and_select_rows(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, float center_x,
   float center_y, long m);
-}  // namespace autoware::diffusion_planner
+}  // namespace autoware::diffusion_planner::preprocess
 
 #endif  // AUTOWARE__DIFFUSION_PLANNER__PREPROCESSING__LANE_SEGMENTS_HPP

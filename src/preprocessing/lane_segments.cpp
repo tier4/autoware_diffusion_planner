@@ -14,7 +14,7 @@
 
 #include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
 
-namespace autoware::diffusion_planner
+namespace autoware::diffusion_planner::preprocess
 {
 
 void compute_distances(
@@ -236,4 +236,4 @@ Eigen::MatrixXf process_segment_to_matrix(
   return segment_data;
 }
 
-}  // namespace autoware::diffusion_planner
+}  // namespace autoware::diffusion_planner::preprocess

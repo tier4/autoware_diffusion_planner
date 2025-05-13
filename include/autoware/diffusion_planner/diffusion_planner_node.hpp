@@ -17,6 +17,7 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
+#include "autoware/diffusion_planner/dimensions.hpp"
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
@@ -190,22 +191,6 @@ public:
   Ort::Session session_;
   Ort::AllocatorWithDefaultOptions allocator_;
 
-  // Model input shapes
-  static constexpr long LANE_POINT_DIM = 12;
-  static constexpr long LANE_MATRIX_DIM = 14;
-  static constexpr long OUTPUT_T = 80;
-
-  const std::vector<long> ego_current_state_shape_ = {1, 10};
-  const std::vector<long> neighbor_agents_past_shape_ = {1, 32, 21, 11};
-  const std::vector<long> lane_has_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<long> static_objects_shape_ = {1, 5, 10};
-  const std::vector<long> lanes_shape_ = {1, 70, 20, 12};
-  const std::vector<long> lanes_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<long> lanes_has_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<long> route_lanes_shape_ = {1, 25, 20, 12};
-
-  // Model output shape
-  const std::vector<long> output_shape_ = {1, 11, 80, 4};
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};
 
