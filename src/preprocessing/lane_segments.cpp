@@ -76,12 +76,12 @@ Eigen::MatrixXf transform_xy_points(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   const std::vector<RowWithDistance> & distances, long m)
 {
+  if (input_matrix.cols() != FULL_MATRIX_COLS || input_matrix.rows() % POINTS_PER_SEGMENT != 0) {
+    throw std::invalid_argument("input_matrix size mismatch");
+  }
+
   const long n_total_segments = static_cast<long>(input_matrix.rows() / POINTS_PER_SEGMENT);
   const long num_segments = std::min(m, n_total_segments);
-
-  if (input_matrix.cols() < FULL_MATRIX_COLS) {
-    throw std::invalid_argument("input_matrix must have at least FULL_MATRIX_COLS columns.");
-  }
 
   Eigen::MatrixXf output_matrix(m * POINTS_PER_SEGMENT, FULL_MATRIX_COLS);
   output_matrix.setZero();
