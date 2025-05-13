@@ -19,6 +19,7 @@
 #include "autoware/diffusion_planner/dimensions.hpp"
 
 #include <autoware_perception_msgs/msg/traffic_light_group_array.hpp>
+#include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/detail/point__struct.hpp>
 
 #include <lanelet2_core/LaneletMap.h>
@@ -38,6 +39,7 @@
 
 namespace autoware::diffusion_planner::preprocess
 {
+using autoware_planning_msgs::msg::LaneletRoute;
 /**
  * @brief Represents a row index with its associated distance and whether it is inside a mask range.
  */
@@ -49,33 +51,59 @@ struct RowWithDistance
 };
 
 /**
+ * @brief Extracts route segments from the map lane segments matrix and transforms them to
+ * ego-centric coordinates.
+ * @param map_lane_segments_matrix Matrix containing lane segment data in map coordinates.
+ * @param map_to_ego_transform Transformation matrix to convert map coordinates to ego-centric
+ * coordinates.
+ * @param route_ptr_ Shared pointer to the route containing the segments to extract.
+ * @param segment_row_indices Map of segment IDs to their corresponding row indices in the lane
+ * segments matrix.
+ * @param center_x X-coordinate of the ego vehicle's center.
+ * @param center_y Y-coordinate of the ego vehicle's center.
+ * @return A flattened vector containing the transformed route segments in ego-centric coordinates.
+ */
+std::vector<float> get_route_segments(
+  const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & map_to_ego_transform,
+  LaneletRoute::ConstSharedPtr route_ptr_, const std::map<int64_t, long> & segment_row_indices,
+  float center_x, float center_y);
+
+/**
+ * @brief Extracts lane tensor data from ego-centric lane segments.
+ *
+ * @param lane_segments_matrix Matrix containing ego-centric lane segment data.
+ * @return A flattened vector of lane tensor data.
+ */
+std::vector<float> extract_lane_tensor_data(const Eigen::MatrixXf & lane_segments_matrix);
+
+/**
+ * @brief Extracts lane speed tensor data from ego-centric lane segments.
+ *
+ * @param lane_segments_matrix Matrix containing ego-centric lane segment data.
+ * @return A flattened vector of lane speed tensor data.
+ */
+std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_segments_matrix);
+
+/**
  * @brief Processes multiple lane segments and converts them into a single matrix.
  *
  * @param lane_segments Vector of lane segments to process.
  * @param segment_row_indices Map to store the starting row index of each segment in the resulting
  * matrix.
- * @param center_x X-coordinate of the center point for filtering.
- * @param center_y Y-coordinate of the center point for filtering.
- * @param mask_range Range within which segments are considered valid.
  * @return A matrix containing the processed lane segment data.
  * @throws std::runtime_error If any segment matrix does not have the expected number of rows.
  */
 Eigen::MatrixXf process_segments_to_matrix(
-  const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices,
-  float center_x, float center_y, float mask_range);
+  const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices);
 
 /**
  * @brief Processes a single lane segment and converts it into a matrix representation.
  *
  * @param segment The lane segment to process.
- * @param center_x X-coordinate of the center point for filtering.
- * @param center_y Y-coordinate of the center point for filtering.
- * @param mask_range Range within which the segment is considered valid.
  * @return A matrix containing the processed lane segment data, or an empty matrix if the segment is
  * invalid.
  */
-Eigen::MatrixXf process_segment_to_matrix(
-  const LaneSegment & segment, float center_x, float center_y, float mask_range);
+Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment);
 
 /**
  * @brief Computes distances of lane segments from a center point and stores the results.

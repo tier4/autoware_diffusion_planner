@@ -17,13 +17,14 @@
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/ego.hpp"
 #include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
+#include "autoware/diffusion_planner/preprocessing/preprocessing_utils.hpp"
+#include "autoware/diffusion_planner/utils/utils.hpp"
 #include "onnxruntime_cxx_api.h"
 
 #include <autoware_utils/math/normalization.hpp>
 
 #include <Eigen/src/Core/Matrix.h>
 
-#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -53,7 +54,7 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
     return;
   }
 
-  normalization_map_ = load_normalization_stats(params_.args_path);
+  normalization_map_ = utils::load_normalization_stats(params_.args_path);
   load_model(params_.model_path);
 
   timer_ = rclcpp::create_timer(
@@ -119,97 +120,6 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
   ego_centric_data.apply_transform(map_to_ego_transform);
   ego_centric_data.trim_to_k_closest_agents();
   return ego_centric_data;
-}
-
-std::vector<float> DiffusionPlanner::extract_ego_centric_lane_segments(
-  const Eigen::MatrixXf & ego_centric_lane_segments)
-{
-  const auto total_lane_points = LANES_SHAPE[1] * POINTS_PER_LANE_SEGMENT;
-  Eigen::MatrixXf lane_segments_matrix(total_lane_points, SEGMENT_POINT_DIM);
-  lane_segments_matrix.block(0, 0, total_lane_points, SEGMENT_POINT_DIM) =
-    ego_centric_lane_segments.block(0, 0, total_lane_points, SEGMENT_POINT_DIM);
-  lane_segments_matrix.transposeInPlace();
-  return {lane_segments_matrix.data(), lane_segments_matrix.data() + lane_segments_matrix.size()};
-}
-
-std::vector<float> DiffusionPlanner::extract_lane_speeds(
-  const Eigen::MatrixXf & ego_centric_lane_segments)
-{
-  const auto total_lane_points = LANES_SPEED_LIMIT_SHAPE[1];
-  Eigen::MatrixXf lane_segments_speed(total_lane_points, LANES_SPEED_LIMIT_SHAPE[2]);
-  lane_segments_speed.block(0, 0, total_lane_points, LANES_SPEED_LIMIT_SHAPE[2]) =
-    ego_centric_lane_segments.block(0, 12, total_lane_points, LANES_SPEED_LIMIT_SHAPE[2]);
-  lane_segments_speed.transposeInPlace();
-  return {lane_segments_speed.data(), lane_segments_speed.data() + lane_segments_speed.size()};
-}
-
-std::vector<float> DiffusionPlanner::get_route_segments(
-  const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y)
-{
-  Eigen::MatrixXf full_route_segment_matrix(
-    POINTS_PER_LANE_SEGMENT * route_ptr_->segments.size(), FULL_MATRIX_COLS);
-  long route_segment_rows = 0;
-  for (const auto & route_segment : route_ptr_->segments) {
-    auto route_segment_row_itr = segment_row_indices_.find(route_segment.preferred_primitive.id);
-    if (route_segment_row_itr == segment_row_indices_.end()) {
-      continue;
-    }
-    full_route_segment_matrix.block(
-      route_segment_rows, 0, POINTS_PER_LANE_SEGMENT, FULL_MATRIX_COLS) =
-      map_lane_segments_matrix_.block(
-        route_segment_row_itr->second, 0, POINTS_PER_LANE_SEGMENT, FULL_MATRIX_COLS);
-    route_segment_rows += POINTS_PER_LANE_SEGMENT;
-  }
-
-  Eigen::MatrixXf ego_centric_route_segments = preprocess::transform_and_select_rows(
-    full_route_segment_matrix, map_to_ego_transform, center_x, center_y, ROUTE_LANES_SHAPE[1]);
-  const auto total_route_points = ROUTE_LANES_SHAPE[1] * POINTS_PER_LANE_SEGMENT;
-  Eigen::MatrixXf route_segments_matrix(total_route_points, SEGMENT_POINT_DIM);
-  route_segments_matrix.block(0, 0, total_route_points, SEGMENT_POINT_DIM) =
-    ego_centric_route_segments.block(0, 0, total_route_points, SEGMENT_POINT_DIM);
-  route_segments_matrix.transposeInPlace();
-  return {
-    route_segments_matrix.data(), route_segments_matrix.data() + route_segments_matrix.size()};
-}
-
-void DiffusionPlanner::normalize_input_data(InputDataMap & input_data_map)
-{
-  auto normalize_vector = [](
-                            std::vector<float> & data, const std::vector<float> & mean,
-                            const std::vector<float> & std_dev) -> void {
-    assert(!data.empty() && "Data vector must not be empty");
-    assert((mean.size() == std_dev.size()) && "Mean and std must be same size");
-    assert((data.size() % std_dev.size() == 0) && "Data size must be divisible by std_dev size");
-    auto cols = std_dev.size();
-    auto rows = data.size() / cols;
-
-    for (size_t row = 0; row < rows; ++row) {
-      const auto offset = row * cols;
-      const auto row_begin =
-        data.begin() + static_cast<std::vector<float>::difference_type>(offset);
-
-      bool is_zero_row = std::all_of(
-        row_begin, row_begin + static_cast<std::vector<float>::difference_type>(cols),
-        [](float x) { return std::abs(x) < std::numeric_limits<float>::epsilon(); });
-
-      if (is_zero_row) continue;
-
-      for (size_t col = 0; col < cols; ++col) {
-        float m = (mean.size() == 1) ? mean[0] : mean[col];
-        float s = (std_dev.size() == 1) ? std_dev[0] : std_dev[col];
-        data[offset + col] = (data[offset + col] - m) / s;
-      }
-    }
-  };
-
-  for (auto & [key, value] : input_data_map) {
-    if (normalization_map_.find(key) != normalization_map_.end()) {
-      const auto & [mean, std_dev] = normalization_map_[key];
-      normalize_vector(value, mean, std_dev);
-    } else {
-      RCLCPP_WARN(get_logger(), "No normalization data for key: %s", key.c_str());
-    }
-  }
 }
 
 MarkerArray DiffusionPlanner::create_lane_marker(
@@ -304,11 +214,9 @@ InputDataMap DiffusionPlanner::create_input_data()
   auto ego_kinematic_state = sub_current_odometry_.take_data();
   auto ego_acceleration = sub_current_acceleration_.take_data();
   auto temp_route = route_subscriber_.take_data();
+
+  transforms_ = utils::get_transform_matrix(*ego_kinematic_state);
   route_ptr_ = (!route_ptr_ || temp_route) ? temp_route : route_ptr_;
-  if (!is_map_loaded_) {
-    RCLCPP_INFO(get_logger(), "Waiting for map data...");
-    return {};
-  }
 
   if (!objects || !ego_kinematic_state || !ego_acceleration || !route_ptr_) {
     RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state or route data received");
@@ -319,30 +227,26 @@ InputDataMap DiffusionPlanner::create_input_data()
   EgoState ego_state(*ego_kinematic_state, *ego_acceleration, 5.0);
   input_data_map["ego_current_state"] = ego_state.as_array();
   // Agent data on ego reference frame
-  transforms_ = get_transform_matrix(*ego_kinematic_state);
   auto map_to_ego_transform = transforms_.second;
-  auto ego_centric_data = get_ego_centric_agent_data(*objects, map_to_ego_transform);
-  input_data_map["neighbor_agents_past"] = ego_centric_data.as_vector();
+  input_data_map["neighbor_agents_past"] =
+    get_ego_centric_agent_data(*objects, map_to_ego_transform).as_vector();
   // Static objects
   // TODO(Daniel): add static objects
-  auto static_objects = create_float_data(STATIC_OBJECTS_SHAPE, 0.0f);
-  input_data_map["static_objects"] = static_objects;
+  input_data_map["static_objects"] = utils::create_float_data(STATIC_OBJECTS_SHAPE, 0.0f);
 
   // map data on ego reference frame
-  const auto & center_x = ego_kinematic_state->pose.pose.position.x;
-  const auto & center_y = ego_kinematic_state->pose.pose.position.y;
-
+  const auto center_x = static_cast<float>(ego_kinematic_state->pose.pose.position.x);
+  const auto center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
   Eigen::MatrixXf ego_centric_lane_segments = preprocess::transform_and_select_rows(
     map_lane_segments_matrix_, map_to_ego_transform, center_x, center_y, LANES_SHAPE[1]);
-  auto lane_data = extract_ego_centric_lane_segments(ego_centric_lane_segments);
-  input_data_map["lanes"] = lane_data;
-  auto lane_speed_data = extract_lane_speeds(ego_centric_lane_segments);
-  input_data_map["lanes_speed_limit"] = lane_speed_data;
+  input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
+  input_data_map["lanes_speed_limit"] =
+    preprocess::extract_lane_speed_tensor_data(ego_centric_lane_segments);
 
   // route data on ego reference frame
-  auto route_segments = get_route_segments(map_to_ego_transform, center_x, center_y);
-  input_data_map["route_lanes"] = route_segments;
-
+  input_data_map["route_lanes"] = preprocess::get_route_segments(
+    map_lane_segments_matrix_, map_to_ego_transform, route_ptr_, segment_row_indices_, center_x,
+    center_y);
   return input_data_map;
 }
 
@@ -401,17 +305,12 @@ void DiffusionPlanner::on_timer()
   // Timer callback function
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
+  if (!is_map_loaded_) {
+    RCLCPP_INFO(get_logger(), "Waiting for map data...");
+    return;
+  }
+
   // Prepare input data for the model
-  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::Allocator cuda_allocator(session_, mem_info);
-
-  [[maybe_unused]] auto get_pythorch_tensor = [](std::string key) {
-    return load_tensor(
-      "/home/danielsanchez/pilot-auto-new-framework/src/autoware/trajectory_generator/"
-      "autoware_diffusion_planner/data/" +
-      key + ".bin");
-  };
-
   auto input_data_map = create_input_data();
   if (input_data_map.empty()) {
     RCLCPP_WARN(get_logger(), "No input data available for inference");
@@ -432,7 +331,7 @@ void DiffusionPlanner::on_timer()
   }
 
   // normalization of data
-  normalize_input_data(input_data_map);
+  preprocess::normalize_input_data(input_data_map, normalization_map_);
 
   auto ego_current_state = input_data_map["ego_current_state"];
   auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
@@ -451,6 +350,8 @@ void DiffusionPlanner::on_timer()
     raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
   }
 
+  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+  Ort::Allocator cuda_allocator(session_, mem_info);
   auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
     mem_info, ego_current_state.data(), ego_current_state.size(), EGO_CURRENT_STATE_SHAPE.data(),
     EGO_CURRENT_STATE_SHAPE.size());
@@ -508,8 +409,8 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     throw std::runtime_error("No lane segments found in the map");
   }
 
-  map_lane_segments_matrix_ = preprocess::process_segments_to_matrix(
-    lane_segments_, segment_row_indices_, 0.0, 0.0, 100000000.0);
+  map_lane_segments_matrix_ =
+    preprocess::process_segments_to_matrix(lane_segments_, segment_row_indices_);
 
   is_map_loaded_ = true;
 }

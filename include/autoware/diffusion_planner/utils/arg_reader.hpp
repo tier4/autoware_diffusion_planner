@@ -22,7 +22,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-namespace autoware::diffusion_planner
+namespace autoware::diffusion_planner::utils
 {
 using json = nlohmann::json;
 
@@ -64,5 +64,5 @@ inline NormalizationMap load_normalization_stats(const std::string & json_path)
 
   return norm_map;
 }
-}  // namespace autoware::diffusion_planner
+}  // namespace autoware::diffusion_planner::utils
 #endif  // AUTOWARE__DIFFUSION_PLANNER__ARG_READER_HPP_

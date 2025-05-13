@@ -76,46 +76,9 @@ using builtin_interfaces::msg::Time;
 using geometry_msgs::msg::Point;
 using rcl_interfaces::msg::SetParametersResult;
 using std_msgs::msg::ColorRGBA;
+using utils::NormalizationMap;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
-
-std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
-  const nav_msgs::msg::Odometry & msg)
-{
-  // Extract position
-  double x = msg.pose.pose.position.x;
-  double y = msg.pose.pose.position.y;
-  double z = msg.pose.pose.position.z;
-
-  // Extract orientation
-  double qx = msg.pose.pose.orientation.x;
-  double qy = msg.pose.pose.orientation.y;
-  double qz = msg.pose.pose.orientation.z;
-  double qw = msg.pose.pose.orientation.w;
-
-  // Create Eigen quaternion and normalize it just in case
-  Eigen::Quaternionf q(qw, qx, qy, qz);
-  q.normalize();
-
-  // Rotation matrix (3x3)
-  Eigen::Matrix3f R = q.toRotationMatrix();
-
-  // Translation vector
-  Eigen::Vector3f t(x, y, z);
-
-  // Base_link → Map (forward)
-  Eigen::Matrix4f bl2map = Eigen::Matrix4f::Identity();
-  bl2map.block<3, 3>(0, 0) = R;
-  bl2map.block<3, 1>(0, 3) = t;
-
-  // Map → Base_link (inverse)
-  Eigen::Matrix4f map2bl = Eigen::Matrix4f::Identity();
-  map2bl.block<3, 3>(0, 0) = R.transpose();
-  map2bl.block<3, 1>(0, 3) = -R.transpose() * t;
-
-  return {bl2map, map2bl};
-}
-
 struct DiffusionPlannerParams
 {
   std::string model_path;
@@ -127,14 +90,6 @@ struct DiffusionPlannerDebugParams
   bool publish_debug_route{false};
   bool publish_debug_map{false};
 };
-
-std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 0.1f)
-{
-  size_t total_size = 1;
-  for (auto dim : shape) total_size *= dim;
-  std::vector<float> data(total_size, fill);
-  return data;
-}
 
 class DiffusionPlanner : public rclcpp::Node
 {
@@ -150,14 +105,8 @@ public:
   std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
-  std::vector<float> extract_ego_centric_lane_segments(
-    const Eigen::MatrixXf & ego_centric_lane_segments);
-  std::vector<float> extract_lane_speeds(const Eigen::MatrixXf & ego_centric_lane_segments);
-  std::vector<float> get_route_segments(
-    const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y);
 
   InputDataMap create_input_data();
-  void normalize_input_data(InputDataMap & input_data_map);
 
   // postprocessing
   Trajectory create_trajectory(
