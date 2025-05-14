@@ -37,13 +37,10 @@
 
 namespace autoware::diffusion_planner
 {
-using TrafficSignalElement = autoware_perception_msgs::msg::TrafficLightElement;
 using TrafficSignal = autoware_perception_msgs::msg::TrafficLightGroup;
 using TrafficSignalArray = autoware_perception_msgs::msg::TrafficLightGroupArray;
 using TrafficLightIdMap = std::unordered_map<lanelet::Id, TrafficSignal>;
 using autoware_perception_msgs::msg::TrafficLightElement;
-
-constexpr long LANE_POINTS = 20;
 
 /**
  * @brief Insert lane points into the container from the end of it.
@@ -51,20 +48,20 @@ constexpr long LANE_POINTS = 20;
  * @param points Sequence of points to be inserted.
  * @param container Points container.
  */
-inline void insertLanePoints(
+inline void insert_lane_points(
   const std::vector<LanePoint> & points, std::vector<LanePoint> & container)
 {
   container.reserve(container.size() * 2);
   container.insert(container.end(), points.begin(), points.end());
 }
 
-inline lanelet::Optional<std::string> toTypeName(const lanelet::ConstLanelet & lanelet)
+inline lanelet::Optional<std::string> to_type_name(const lanelet::ConstLanelet & lanelet)
 {
   return lanelet.hasAttribute("type") ? lanelet.attribute("type").as<std::string>()
                                       : lanelet::Optional<std::string>();
 }
 
-inline lanelet::Optional<std::string> toTypeName(const lanelet::ConstLineString3d & linestring)
+inline lanelet::Optional<std::string> to_type_name(const lanelet::ConstLineString3d & linestring)
 {
   return linestring.hasAttribute("type") ? linestring.attribute("type").as<std::string>()
                                          : lanelet::Optional<std::string>();
@@ -76,7 +73,8 @@ inline lanelet::Optional<std::string> toTypeName(const lanelet::ConstLineString3
  * @param lanelet Lanelet instance.
  * @return std::optional<string>
  */
-inline lanelet::Optional<std::string> toSubtypeName(const lanelet::ConstLanelet & lanelet) noexcept
+inline lanelet::Optional<std::string> to_subtype_name(
+  const lanelet::ConstLanelet & lanelet) noexcept
 {
   return lanelet.hasAttribute("subtype") ? lanelet.attribute("subtype").as<std::string>()
                                          : lanelet::Optional<std::string>();
@@ -88,7 +86,7 @@ inline lanelet::Optional<std::string> toSubtypeName(const lanelet::ConstLanelet 
  * @param linestring 3D linestring instance.
  * @return lanelet::Optional<std::string>
  */
-inline lanelet::Optional<std::string> toSubtypeName(
+inline lanelet::Optional<std::string> to_subtype_name(
   const lanelet::ConstLineString3d & linestring) noexcept
 {
   return linestring.hasAttribute("subtype") ? linestring.attribute("subtype").as<std::string>()
@@ -101,7 +99,7 @@ inline lanelet::Optional<std::string> toSubtypeName(
  * @param lanelet Lanelet instance.
  * @return true if the lanelet has the attribute named turn_direction.
  */
-inline bool isTurnableIntersection(const lanelet::ConstLanelet & lanelet) noexcept
+inline bool is_turnable_intersection(const lanelet::ConstLanelet & lanelet) noexcept
 {
   return lanelet.hasAttribute("turn_direction");
 }
@@ -113,7 +111,7 @@ inline bool isTurnableIntersection(const lanelet::ConstLanelet & lanelet) noexce
  * @return True if the lanelet subtype is the one of the (road, highway, road_shoulder,
  * pedestrian_lane, bicycle_lane, walkway).
  */
-inline bool isLaneLike(const lanelet::Optional<std::string> & subtype)
+inline bool is_lane_like(const lanelet::Optional<std::string> & subtype)
 {
   if (!subtype) {
     return false;
@@ -131,7 +129,7 @@ inline bool isLaneLike(const lanelet::Optional<std::string> & subtype)
  * @param subtype Subtype of the corresponding lanelet.
  * @return True if the subtype is the one of the (road, highway, road_shoulder).
  */
-inline bool isRoadwayLike(const lanelet::Optional<std::string> & subtype)
+inline bool is_roadway_like(const lanelet::Optional<std::string> & subtype)
 {
   if (!subtype) {
     return false;
@@ -147,9 +145,9 @@ inline bool isRoadwayLike(const lanelet::Optional<std::string> & subtype)
  * @return True if the type is the one of the (line_thin, line_thick, road_boarder) and the subtype
  * is not virtual.
  */
-inline bool isBoundaryLike(const lanelet::ConstLineString3d & linestring)
+inline bool is_boundary_like(const lanelet::ConstLineString3d & linestring)
 {
-  const auto type = toTypeName(linestring);
+  const auto type = to_type_name(linestring);
   if (!type) {
     return false;
   }
@@ -166,7 +164,7 @@ inline bool isBoundaryLike(const lanelet::ConstLineString3d & linestring)
  * @param subtype Subtype of the corresponding polygon.
  * @return True if the lanelet subtype is the one of the (crosswalk,).
  */
-inline bool isCrosswalkLike(const lanelet::Optional<std::string> & subtype)
+inline bool is_crosswalk_like(const lanelet::Optional<std::string> & subtype)
 {
   if (!subtype) {
     return false;
@@ -242,7 +240,7 @@ public:
    * @brief Convert a lanelet map to line segment data
    * @return std::vector<LaneSegment>
    */
-  [[nodiscard]] std::vector<LaneSegment> convert_to_lane_segments() const;
+  [[nodiscard]] std::vector<LaneSegment> convert_to_lane_segments(const long num_lane_points) const;
 
   /**
    * @brief Convert lane segment data to matrix form
@@ -267,11 +265,11 @@ private:
    * @param distance_threshold Distance threshold from the specified position.
    * @return std::vector<LanePoint>
    */
-  [[nodiscard]] std::vector<LanePoint> fromLinestring(
+  [[nodiscard]] std::vector<LanePoint> from_linestring(
     const lanelet::ConstLineString3d & linestring, const geometry_msgs::msg::Point & position,
     double distance_threshold) const noexcept;
 
-  [[nodiscard]] std::vector<LanePoint> fromLinestring(
+  [[nodiscard]] std::vector<LanePoint> from_linestring(
     const lanelet::ConstLineString3d & linestring) const noexcept;
 
   /**
@@ -282,11 +280,11 @@ private:
    * @param distance_threshold Distance threshold from the specified position.
    * @return std::vector<LanePoint>
    */
-  [[nodiscard]] std::vector<LanePoint> fromPolygon(
+  [[nodiscard]] std::vector<LanePoint> from_polygon(
     const lanelet::CompoundPolygon3d & polygon, const geometry_msgs::msg::Point & position,
     double distance_threshold) const noexcept;
 
-  [[nodiscard]] std::vector<LanePoint> fromPolygon(
+  [[nodiscard]] std::vector<LanePoint> from_polygon(
     const lanelet::CompoundPolygon3d & polygon) const noexcept;
 
   lanelet::LaneletMapConstPtr lanelet_map_ptr_;  //!< Pointer of lanelet map.
@@ -294,135 +292,6 @@ private:
   size_t max_num_point_;                         //!< The max number of points.
   float point_break_distance_;                   //!< Distance threshold to separate two polylines.
 };
-struct RowWithDistance
-{
-  long index;
-  float distance_squared;
-  bool inside;
-};
-// Function to compute squared distances of each matrix of lane segments
-inline void compute_distances(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  std::vector<RowWithDistance> & distances, float center_x, float center_y,
-  float mask_range = 100.0)
-{
-  const auto n = input_matrix.rows();
-  distances.reserve(n);
-  for (long i = 0; i < n; i += LANE_POINTS) {
-    // Directly access input matrix as raw memory
-    float x = input_matrix.block(i, 0, LANE_POINTS, 1).mean();
-    float y = input_matrix.block(i, 1, LANE_POINTS, 1).mean();
-    bool inside =
-      (x > center_x - mask_range * 1.1 && x < center_x + mask_range * 1.1 &&
-       y > center_y - mask_range * 1.1 && y < center_y + mask_range * 1.1);
-    float x_first = input_matrix(i, 0);
-    float y_first = input_matrix(i, 1);
-
-    float x_last = input_matrix(i + LANE_POINTS - 1, 0);
-    float y_last = input_matrix(i + LANE_POINTS - 1, 1);
-
-    Eigen::Vector4f p_first(x_first, y_first, 0.0f, 1.0f);
-    Eigen::Vector4f p_transformed_first = transform_matrix * p_first;
-    float distance_squared_first = p_transformed_first.head<2>().squaredNorm();
-
-    Eigen::Vector4f p_last(x_last, y_last, 0.0f, 1.0f);
-    Eigen::Vector4f p_transformed_last = transform_matrix * p_last;
-    float distance_squared_last = p_transformed_last.head<2>().squaredNorm();
-
-    float distance_squared = std::min(distance_squared_last, distance_squared_first);
-    distances.push_back({i, distance_squared, inside});
-  }
-}
-
-inline void sort_indices_by_distance(std::vector<RowWithDistance> & distances)
-{
-  std::sort(distances.begin(), distances.end(), [&](auto & a, auto & b) {
-    return a.distance_squared < b.distance_squared;
-  });
-}
-
-inline void transform_selected_cols(
-  const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
-  long row_idx, bool do_translation = true)
-{
-  Eigen::Matrix<float, 4, LANE_POINTS> xy_block = Eigen::Matrix<float, 4, LANE_POINTS>::Zero();
-  xy_block.block<2, LANE_POINTS>(0, 0) =
-    output_matrix.block<2, LANE_POINTS>(row_idx, column_idx * LANE_POINTS);
-  xy_block.row(3) = do_translation ? Eigen::Matrix<float, 1, LANE_POINTS>::Ones()
-                                   : Eigen::Matrix<float, 1, LANE_POINTS>::Zero();
-
-  Eigen::Matrix<float, 4, LANE_POINTS> transformed_block = transform_matrix * xy_block;
-  output_matrix.block<2, LANE_POINTS>(row_idx, column_idx * LANE_POINTS) =
-    transformed_block.block<2, LANE_POINTS>(0, 0);
-}
-
-inline Eigen::MatrixXf transform_xy_points(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  const std::vector<RowWithDistance> & distances, long m)
-{
-  constexpr long n_columns = 14;
-  const long n_total_segments = static_cast<long>(input_matrix.rows() / LANE_POINTS);
-  const long num_segments = std::min(m, n_total_segments);
-
-  if (input_matrix.cols() < n_columns) {
-    throw std::invalid_argument("input_matrix must have at least 14 columns.");
-  }
-
-  Eigen::MatrixXf output_matrix(m * LANE_POINTS, n_columns);
-  output_matrix.setZero();
-  output_matrix.transposeInPlace();  // helps to simplify the code below
-
-  long col_counter = 0;
-  long added_segments = 0;
-  for (auto itr = distances.begin(), end = distances.end(); itr != end; ++itr) {
-    // get the 20 rows corresponding to the segment
-    if (!itr->inside) {
-      continue;
-    }
-    const auto row_idx = itr->index;
-
-    output_matrix.block<n_columns, LANE_POINTS>(0, col_counter * LANE_POINTS) =
-      input_matrix.block<LANE_POINTS, n_columns>(row_idx, 0).transpose();
-
-    // transform the x and y coordinates
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, 0);
-    // the dx and dy coordinates do not require translation
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, 2, false);
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, 4);
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, 6);
-    ++col_counter;
-    ++added_segments;
-    if (added_segments >= num_segments) {
-      break;
-    }
-  }
-  // subtract center from boundaries
-  output_matrix.row(4) = output_matrix.row(4) - output_matrix.row(0);
-  output_matrix.row(5) = output_matrix.row(5) - output_matrix.row(1);
-  output_matrix.row(6) = output_matrix.row(6) - output_matrix.row(0);
-  output_matrix.row(7) = output_matrix.row(7) - output_matrix.row(1);
-
-  return output_matrix.transpose();
-}
-
-inline Eigen::MatrixXf transform_and_select_rows(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, float center_x,
-  float center_y, long m)
-{
-  const auto n = input_matrix.rows();
-  if (n == 0 || input_matrix.cols() != 14 || m <= 0) {
-    throw std::invalid_argument(
-      "Input matrix must have at least 14 columns and m must be greater than 0.");
-    return {};
-  }
-  std::vector<RowWithDistance> distances;
-  // Step 1: Compute distances
-  compute_distances(input_matrix, transform_matrix, distances, center_x, center_y, 100);
-  // Step 2: Sort indices by distance
-  sort_indices_by_distance(distances);
-  // Step 3: Apply transformation to selected rows
-  return transform_xy_points(input_matrix, transform_matrix, distances, m);
-}
 
 }  // namespace autoware::diffusion_planner
 

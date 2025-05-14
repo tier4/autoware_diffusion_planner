@@ -125,22 +125,21 @@ public:
   Polyline(MapType type, const std::vector<LanePoint> & points)
   : polyline_type_(type), waypoints_(points)
   {
-    validate();
   }
 
   void assign_waypoints(const std::vector<LanePoint> & points) { waypoints_ = points; }
 
   void clear() { waypoints_.clear(); }
 
-  bool is_empty() const { return waypoints_.empty(); }
+  [[nodiscard]] bool is_empty() const { return waypoints_.empty(); }
 
-  size_t size() const { return waypoints_.size(); }
+  [[nodiscard]] size_t size() const { return waypoints_.size(); }
 
-  const std::vector<LanePoint> & waypoints() const { return waypoints_; }
+  [[nodiscard]] const std::vector<LanePoint> & waypoints() const { return waypoints_; }
 
-  const MapType & polyline_type() const { return polyline_type_; }
+  [[nodiscard]] const MapType & polyline_type() const { return polyline_type_; }
 
-  std::vector<std::array<float, 3>> xyz() const
+  [[nodiscard]] std::vector<std::array<float, 3>> xyz() const
   {
     std::vector<std::array<float, 3>> coords;
     coords.reserve(waypoints_.size());
@@ -150,7 +149,7 @@ public:
     return coords;
   }
 
-  std::vector<std::array<float, 2>> xy() const
+  [[nodiscard]] std::vector<std::array<float, 2>> xy() const
   {
     std::vector<std::array<float, 2>> coords;
     coords.reserve(waypoints_.size());
@@ -160,7 +159,7 @@ public:
     return coords;
   }
 
-  std::vector<std::array<float, 3>> dxyz() const
+  [[nodiscard]] std::vector<std::array<float, 3>> dxyz() const
   {
     if (waypoints_.empty()) return {};
 
@@ -177,7 +176,7 @@ public:
     return directions;
   }
 
-  std::vector<std::array<float, 2>> dxy() const
+  [[nodiscard]] std::vector<std::array<float, 2>> dxy() const
   {
     if (waypoints_.empty()) return {};
 
@@ -193,8 +192,7 @@ public:
     return directions;
   }
 
-  // Full array, equivalent to Python `as_array(full=True)`
-  std::vector<std::array<float, FULL_DIM3D>> as_full_array() const
+  [[nodiscard]] std::vector<std::array<float, FULL_DIM3D>> as_full_array() const
   {
     std::vector<std::array<float, FULL_DIM3D>> result;
     result.reserve(waypoints_.size());
@@ -216,16 +214,6 @@ public:
   }
 
 private:
-  void validate() const
-  {
-    for (const auto & pt : waypoints_) {
-      // Simple dimension validation
-      if (pt.dim() != FULL_DIM3D) {
-        throw std::runtime_error("LanePoint has incorrect dimensionality.");
-      }
-    }
-  }
-
   MapType polyline_type_;
   std::vector<LanePoint> waypoints_;
 };
@@ -258,27 +246,27 @@ struct PolylineData
       auto & cur_point = points.at(i);
 
       if (i == 0) {
-        addNewPolyline(cur_point, point_cnt);
+        add_new_polyline(cur_point, point_cnt);
         continue;
       }
 
       if (point_cnt >= num_point_) {
-        addNewPolyline(cur_point, point_cnt);
+        add_new_polyline(cur_point, point_cnt);
       } else if (const auto & prev_point = points.at(i - 1);
                  cur_point.distance(prev_point) >= distance_threshold_ ||
                  cur_point.label() != prev_point.label()) {
         if (point_cnt < num_point_) {
-          addEmptyPoints(point_cnt);
+          add_empty_points(point_cnt);
         }
-        addNewPolyline(cur_point, point_cnt);
+        add_new_polyline(cur_point, point_cnt);
       } else {
-        addPoint(cur_point, point_cnt);
+        add_point(cur_point, point_cnt);
       }
     }
-    addEmptyPoints(point_cnt);
+    add_empty_points(point_cnt);
 
     if (num_polyline_ < min_num_polyline) {
-      addEmptyPolyline(min_num_polyline - num_polyline_);
+      add_empty_polyline(min_num_polyline - num_polyline_);
     }
   }
 
@@ -293,9 +281,6 @@ struct PolylineData
 
   // Return the number of all elements `K*P*D`.
   [[nodiscard]] size_t size() const { return num_polyline_ * num_point_ * state_dim(); }
-
-  // Return the number of state dimensions of MTR input `D+2`.
-  [[nodiscard]] size_t input_dim() const { return state_dim() + 2; }
 
   // Return the data shape ordering in `(K, P, D)`.
   [[nodiscard]] std::tuple<size_t, size_t, size_t> shape() const
@@ -313,13 +298,13 @@ private:
    *
    * @param num_polyline The number of polylines to add.
    */
-  void addEmptyPolyline(size_t num_polyline)
+  void add_empty_polyline(size_t num_polyline)
   {
     for (size_t i = 0; i < num_polyline; ++i) {
       size_t point_cnt = 0;
       auto empty_point = LanePoint::empty();
-      addNewPolyline(empty_point, point_cnt);
-      addEmptyPoints(point_cnt);
+      add_new_polyline(empty_point, point_cnt);
+      add_empty_points(point_cnt);
     }
   }
 
@@ -330,7 +315,7 @@ private:
    * @param point LanePoint instance.
    * @param point_cnt The current count of points, which will be reset to `1`.
    */
-  void addNewPolyline(const LanePoint & point, size_t & point_cnt)
+  void add_new_polyline(const LanePoint & point, size_t & point_cnt)
   {
     const auto s = point.data_ptr();
     for (size_t d = 0; d < state_dim(); ++d) {
@@ -345,7 +330,7 @@ private:
    *
    * @param point_cnt The number of current count of points, which will be reset to `PointNum`.
    */
-  void addEmptyPoints(size_t & point_cnt)
+  void add_empty_points(size_t & point_cnt)
   {
     const auto s = LanePoint::empty().data_ptr();
     for (std::size_t n = point_cnt; n < num_point_; ++n) {
@@ -362,7 +347,7 @@ private:
    * @param point
    * @param point_cnt
    */
-  void addPoint(const LanePoint & point, std::size_t & point_cnt)
+  void add_point(const LanePoint & point, std::size_t & point_cnt)
   {
     const auto s = point.data_ptr();
     for (size_t d = 0; d < state_dim(); ++d) {

@@ -17,6 +17,7 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
+#include "autoware/diffusion_planner/dimensions.hpp"
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
@@ -75,46 +76,9 @@ using builtin_interfaces::msg::Time;
 using geometry_msgs::msg::Point;
 using rcl_interfaces::msg::SetParametersResult;
 using std_msgs::msg::ColorRGBA;
+using utils::NormalizationMap;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
-
-std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
-  const nav_msgs::msg::Odometry & msg)
-{
-  // Extract position
-  double x = msg.pose.pose.position.x;
-  double y = msg.pose.pose.position.y;
-  double z = msg.pose.pose.position.z;
-
-  // Extract orientation
-  double qx = msg.pose.pose.orientation.x;
-  double qy = msg.pose.pose.orientation.y;
-  double qz = msg.pose.pose.orientation.z;
-  double qw = msg.pose.pose.orientation.w;
-
-  // Create Eigen quaternion and normalize it just in case
-  Eigen::Quaternionf q(qw, qx, qy, qz);
-  q.normalize();
-
-  // Rotation matrix (3x3)
-  Eigen::Matrix3f R = q.toRotationMatrix();
-
-  // Translation vector
-  Eigen::Vector3f t(x, y, z);
-
-  // Base_link → Map (forward)
-  Eigen::Matrix4f bl2map = Eigen::Matrix4f::Identity();
-  bl2map.block<3, 3>(0, 0) = R;
-  bl2map.block<3, 1>(0, 3) = t;
-
-  // Map → Base_link (inverse)
-  Eigen::Matrix4f map2bl = Eigen::Matrix4f::Identity();
-  map2bl.block<3, 3>(0, 0) = R.transpose();
-  map2bl.block<3, 1>(0, 3) = -R.transpose() * t;
-
-  return {bl2map, map2bl};
-}
-
 struct DiffusionPlannerParams
 {
   std::string model_path;
@@ -126,14 +90,6 @@ struct DiffusionPlannerDebugParams
   bool publish_debug_route{false};
   bool publish_debug_map{false};
 };
-
-std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 0.1f)
-{
-  size_t total_size = 1;
-  for (auto dim : shape) total_size *= dim;
-  std::vector<float> data(total_size, fill);
-  return data;
-}
 
 class DiffusionPlanner : public rclcpp::Node
 {
@@ -149,14 +105,8 @@ public:
   std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
-  std::vector<float> extract_ego_centric_lane_segments(
-    const Eigen::MatrixXf & ego_centric_lane_segments);
-  std::vector<float> extract_lane_speeds(const Eigen::MatrixXf & ego_centric_lane_segments);
-  std::vector<float> get_route_segments(
-    const Eigen::Matrix4f & map_to_ego_transform, float center_x, float center_y);
 
   InputDataMap create_input_data();
-  void normalize_input_data(InputDataMap & input_data_map);
 
   // postprocessing
   Trajectory create_trajectory(
@@ -168,21 +118,6 @@ public:
     const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
     const std::string & ns = "base_link");
 
-  inline void transform_output_matrix(
-    const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
-    long row_idx, bool do_translation = true)
-  {
-    Eigen::Matrix<float, 4, OUTPUT_T> xy_block = Eigen::Matrix<float, 4, OUTPUT_T>::Zero();
-    xy_block.block<2, OUTPUT_T>(0, 0) =
-      output_matrix.block<2, OUTPUT_T>(row_idx, column_idx * OUTPUT_T);
-    xy_block.row(3) = do_translation ? Eigen::Matrix<float, 1, OUTPUT_T>::Ones()
-                                     : Eigen::Matrix<float, 1, OUTPUT_T>::Zero();
-
-    Eigen::Matrix<float, 4, OUTPUT_T> transformed_block = transform_matrix * xy_block;
-    output_matrix.block<2, OUTPUT_T>(row_idx, column_idx * OUTPUT_T) =
-      transformed_block.block<2, OUTPUT_T>(0, 0);
-  };
-
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
   Ort::Env env_;
@@ -190,23 +125,6 @@ public:
   Ort::Session session_;
   Ort::AllocatorWithDefaultOptions allocator_;
 
-  // Model input shapes
-  static constexpr long NUM_LANE_POINTS = 20;
-  static constexpr long LANE_POINT_DIM = 12;
-  static constexpr long LANE_MATRIX_DIM = 14;
-  static constexpr long OUTPUT_T = 80;
-
-  const std::vector<long> ego_current_state_shape_ = {1, 10};
-  const std::vector<long> neighbor_agents_past_shape_ = {1, 32, 21, 11};
-  const std::vector<long> lane_has_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<long> static_objects_shape_ = {1, 5, 10};
-  const std::vector<long> lanes_shape_ = {1, 70, 20, 12};
-  const std::vector<long> lanes_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<long> lanes_has_speed_limit_shape_ = {1, 70, 1};
-  const std::vector<long> route_lanes_shape_ = {1, 25, 20, 12};
-
-  // Model output shape
-  const std::vector<long> output_shape_ = {1, 11, 80, 4};
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};
 
