@@ -16,7 +16,7 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/ego.hpp"
-#include "autoware/diffusion_planner/posprocessing/posprocessing_utils.hpp"
+#include "autoware/diffusion_planner/postprocessing/postprocessing_utils.hpp"
 #include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
 #include "autoware/diffusion_planner/preprocessing/preprocessing_utils.hpp"
 #include "autoware/diffusion_planner/utils/utils.hpp"
@@ -338,7 +338,7 @@ void DiffusionPlanner::on_timer()
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
     auto output_trajectory =
-      posprocessing::create_trajectory(output, this->now(), transforms_.first);
+      postprocessing::create_trajectory(output, this->now(), transforms_.first);
     pub_trajectory_->publish(output_trajectory);
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;

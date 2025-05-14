@@ -22,7 +22,7 @@ ament_auto_add_library(autoware_diffusion_planner_component SHARED
   src/conversion/lanelet.cpp
   src/conversion/agent.cpp
   src/conversion/ego.cpp
-  src/posprocessing/posprocessing_utils.cpp
+  src/postprocessing/postprocessing_utils.cpp
   src/preprocessing/lane_segments.cpp
   src/preprocessing/preprocessing_utils.cpp
   src/utils/utils.cpp

@@ -25,7 +25,7 @@
 #include <cassert>
 #include <vector>
 
-namespace autoware::diffusion_planner::posprocessing
+namespace autoware::diffusion_planner::postprocessing
 {
 using autoware_planning_msgs::msg::Trajectory;
 
@@ -37,5 +37,5 @@ Trajectory create_trajectory(
   std::vector<Ort::Value> & predictions, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map);
 
-}  // namespace autoware::diffusion_planner::posprocessing
+}  // namespace autoware::diffusion_planner::postprocessing
 #endif  // AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP

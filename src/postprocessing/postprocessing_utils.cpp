@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "autoware/diffusion_planner/posprocessing/posprocessing_utils.hpp"
-
 #include "autoware/diffusion_planner/dimensions.hpp"
+#include "autoware/diffusion_planner/postprocessing/postprocessing_utils.hpp"
 
 #include <autoware_utils/geometry/geometry.hpp>
 #include <autoware_utils/math/normalization.hpp>
 #include <rclcpp/time.hpp>
 
-namespace autoware::diffusion_planner::posprocessing
+namespace autoware::diffusion_planner::postprocessing
 {
 using autoware_planning_msgs::msg::TrajectoryPoint;
 
@@ -65,8 +64,8 @@ Trajectory create_trajectory(
   // Copy only the relevant part
   prediction_matrix = mapped_data;  // Copies first rows*cols elements row-wise
   prediction_matrix.transposeInPlace();
-  posprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
-  posprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+  postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
+  postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
   prediction_matrix.transposeInPlace();
 
   // TODO(Daniel): check there is no issue with the speed of 1st point (index 0)
@@ -91,4 +90,4 @@ Trajectory create_trajectory(
   return trajectory;
 }
 
-}  // namespace autoware::diffusion_planner::posprocessing
+}  // namespace autoware::diffusion_planner::postprocessing
