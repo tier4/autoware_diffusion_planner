@@ -22,8 +22,6 @@
 #include "autoware/diffusion_planner/utils/utils.hpp"
 #include "onnxruntime_cxx_api.h"
 
-#include <autoware_utils/math/normalization.hpp>
-
 #include <Eigen/src/Core/Matrix.h>
 
 #include <cmath>
@@ -251,57 +249,6 @@ InputDataMap DiffusionPlanner::create_input_data()
   return input_data_map;
 }
 
-Trajectory DiffusionPlanner::create_trajectory(
-  std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map)
-{
-  Trajectory trajectory;
-  trajectory.header.stamp = this->now();
-  trajectory.header.frame_id = "map";
-  // one batch of predictions
-  // TODO(Daniel): add batch support
-  auto data = predictions[0].GetTensorMutableData<float>();
-  const auto prediction_shape = predictions[0].GetTensorTypeAndShapeInfo().GetShape();
-  const auto num_of_dimensions = prediction_shape.size();
-
-  // copy relevant part of data to Eigen matrix
-  auto rows = prediction_shape[num_of_dimensions - 2];
-  auto cols = prediction_shape[num_of_dimensions - 1];
-
-  Eigen::MatrixXf prediction_matrix(rows, cols);
-
-  // Fill matrix row-wise from data using Eigen::Map
-  Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> mapped_data(
-    data, rows, cols);
-
-  // Copy only the relevant part
-  prediction_matrix = mapped_data;  // Copies first rows*cols elements row-wise
-  prediction_matrix.transposeInPlace();
-  posprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
-  posprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
-  prediction_matrix.transposeInPlace();
-
-  // TODO(Daniel): check there is no issue with the speed of 1st point (index 0)
-  constexpr double dt = 0.1f;
-  double prev_x = 0.;
-  double prev_y = 0.;
-  for (long row = 0; row < prediction_matrix.rows(); ++row) {
-    TrajectoryPoint p;
-    p.pose.position.x = prediction_matrix(row, 0);
-    p.pose.position.y = prediction_matrix(row, 1);
-    p.pose.position.z = 0.0;
-    auto yaw = std::atan2(prediction_matrix(row, 3), prediction_matrix(row, 2));
-    yaw = static_cast<float>(autoware_utils::normalize_radian(yaw));
-    p.pose.orientation = autoware_utils::create_quaternion_from_yaw(yaw);
-    auto distance = std::hypot(p.pose.position.x - prev_x, p.pose.position.y - prev_y);
-    p.longitudinal_velocity_mps = static_cast<float>(distance / dt);
-
-    prev_x = p.pose.position.x;
-    prev_y = p.pose.position.y;
-    trajectory.points.push_back(p);
-  }
-  return trajectory;
-}
-
 void DiffusionPlanner::on_timer()
 {
   // Timer callback function
@@ -390,7 +337,8 @@ void DiffusionPlanner::on_timer()
   try {
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
-    auto output_trajectory = create_trajectory(output, transforms_.first);
+    auto output_trajectory =
+      posprocessing::create_trajectory(output, this->now(), transforms_.first);
     pub_trajectory_->publish(output_trajectory);
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;

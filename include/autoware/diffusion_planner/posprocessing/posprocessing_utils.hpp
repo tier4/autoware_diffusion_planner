@@ -15,22 +15,27 @@
 #ifndef AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP
 #define AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP
 
+#include "onnxruntime_cxx_api.h"
+#include "rclcpp/rclcpp.hpp"
+
 #include <Eigen/Dense>
 
-#include <algorithm>
+#include <autoware_planning_msgs/msg/trajectory.hpp>
+
 #include <cassert>
-#include <limits>
-#include <stdexcept>
-#include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace autoware::diffusion_planner::posprocessing
 {
+using autoware_planning_msgs::msg::Trajectory;
 
 void transform_output_matrix(
   const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
   long row_idx, bool do_translation = true);
+
+Trajectory create_trajectory(
+  std::vector<Ort::Value> & predictions, const rclcpp::Time & stamp,
+  const Eigen::Matrix4f & transform_ego_to_map);
 
 }  // namespace autoware::diffusion_planner::posprocessing
 #endif  // AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP
