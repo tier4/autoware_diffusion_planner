@@ -16,11 +16,14 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/ego.hpp"
+#include "autoware/diffusion_planner/dimensions.hpp"
 #include "autoware/diffusion_planner/postprocessing/postprocessing_utils.hpp"
-#include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
 #include "autoware/diffusion_planner/preprocessing/preprocessing_utils.hpp"
 #include "autoware/diffusion_planner/utils/utils.hpp"
 #include "onnxruntime_cxx_api.h"
+
+#include <rclcpp/duration.hpp>
+#include <rclcpp/logging.hpp>
 
 #include <Eigen/src/Core/Matrix.h>
 
@@ -123,8 +126,36 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
 
 MarkerArray DiffusionPlanner::create_lane_marker(
   const std::vector<float> & lane_vector, [[maybe_unused]] const std::vector<long> & shape,
-  const Time & stamp, const std::array<float, 4> colors, const std::string & ns)
+  const Time & stamp, const std::array<float, 4> colors, const std::string & ns,
+  const bool set_traffic_light_color)
 {
+  auto get_traffic_light_color = [](float g, float y, float r) {
+    ColorRGBA color;
+    color.r = 0.0;
+    color.g = 0.0;
+    color.b = 0.0;
+    color.a = 0.8;
+    if (g > 0.1f) {
+      color.g = 0.8;
+      return color;
+    }
+    if (y > 0.1f) {
+      color.g = 0.6;
+      color.r = 0.6;
+      return color;
+    }
+
+    if (r > 0.1f) {
+      color.r = 0.8;
+      return color;
+    }
+
+    color.r = 0.9;
+    color.g = 0.9;
+    color.b = 0.9;
+    return color;
+  };
+
   MarkerArray marker_array;
   const long P = shape[2];
   const long D = shape[3];
@@ -174,9 +205,19 @@ MarkerArray DiffusionPlanner::create_lane_marker(
     color_sphere.a = 0.8;
     marker_sphere.color = color_sphere;
 
+    if (set_traffic_light_color) {
+      auto g = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_GREEN];
+      auto y = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_YELLOW];
+      auto r = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_RED];
+      if (g + y + r > 0.1f) {
+        std::cerr << "I should be having color no?\n";
+      }
+      marker.color = get_traffic_light_color(g, y, r);
+    }
+
     for (long p = 0; p < P; ++p) {
-      auto x = lane_vector[P * D * l + p * D + 0];
-      auto y = lane_vector[P * D * l + p * D + 1];
+      auto x = lane_vector[P * D * l + p * D + X];
+      auto y = lane_vector[P * D * l + p * D + Y];
       float z = 0.5f;
       float norm = std::sqrt(x * x + y * y);
       if (norm < 1e-2) continue;
@@ -212,15 +253,25 @@ InputDataMap DiffusionPlanner::create_input_data()
   auto objects = sub_tracked_objects_.take_data();
   auto ego_kinematic_state = sub_current_odometry_.take_data();
   auto ego_acceleration = sub_current_acceleration_.take_data();
-  auto temp_route = route_subscriber_.take_data();
+  auto traffic_signals = sub_traffic_signals_.take_data();
+  auto temp_route_ptr = route_subscriber_.take_data();
 
-  transforms_ = utils::get_transform_matrix(*ego_kinematic_state);
-  route_ptr_ = (!route_ptr_ || temp_route) ? temp_route : route_ptr_;
+  route_ptr_ = (!route_ptr_ || temp_route_ptr) ? temp_route_ptr : route_ptr_;
 
   if (!objects || !ego_kinematic_state || !ego_acceleration || !route_ptr_) {
     RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state or route data received");
     return {};
   }
+
+  if (!traffic_signals) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 5000,
+      "no traffic signal received. traffic light info will not be updated");
+  }
+
+  preprocess::process_traffic_signals(traffic_signals, traffic_light_id_map_);
+  transforms_ = utils::get_transform_matrix(*ego_kinematic_state);
+
   // Ego state
   // TODO(Daniel): use vehicle_info_utils
   EgoState ego_state(*ego_kinematic_state, *ego_acceleration, 5.0);
@@ -237,15 +288,16 @@ InputDataMap DiffusionPlanner::create_input_data()
   const auto center_x = static_cast<float>(ego_kinematic_state->pose.pose.position.x);
   const auto center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
   Eigen::MatrixXf ego_centric_lane_segments = preprocess::transform_and_select_rows(
-    map_lane_segments_matrix_, map_to_ego_transform, center_x, center_y, LANES_SHAPE[1]);
+    map_lane_segments_matrix_, map_to_ego_transform, row_id_mapping_, traffic_light_id_map_,
+    lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
   input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
   input_data_map["lanes_speed_limit"] =
     preprocess::extract_lane_speed_tensor_data(ego_centric_lane_segments);
 
   // route data on ego reference frame
   input_data_map["route_lanes"] = preprocess::get_route_segments(
-    map_lane_segments_matrix_, map_to_ego_transform, route_ptr_, segment_row_indices_, center_x,
-    center_y);
+    map_lane_segments_matrix_, map_to_ego_transform, route_ptr_, row_id_mapping_,
+    traffic_light_id_map_, lanelet_map_ptr_, center_x, center_y);
   return input_data_map;
 }
 
@@ -269,7 +321,7 @@ void DiffusionPlanner::on_timer()
   if (debug_params_.publish_debug_route) {
     auto route_markers = create_lane_marker(
       input_data_map["route_lanes"], ROUTE_LANES_SHAPE, this->now(), {0.1, 0.8, 0.0, 0.8},
-      "base_link");
+      "base_link", true);
     pub_route_marker_->publish(route_markers);
   }
 
@@ -360,7 +412,7 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
   }
 
   map_lane_segments_matrix_ =
-    preprocess::process_segments_to_matrix(lane_segments_, segment_row_indices_);
+    preprocess::process_segments_to_matrix(lane_segments_, row_id_mapping_);
 
   is_map_loaded_ = true;
 }

@@ -25,6 +25,7 @@ ament_auto_add_library(autoware_diffusion_planner_component SHARED
   src/postprocessing/postprocessing_utils.cpp
   src/preprocessing/lane_segments.cpp
   src/preprocessing/preprocessing_utils.cpp
+  src/preprocessing/traffic_signals.cpp
   src/utils/utils.cpp
 )
 

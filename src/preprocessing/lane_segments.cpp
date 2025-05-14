@@ -16,6 +16,12 @@
 
 #include "autoware/diffusion_planner/dimensions.hpp"
 
+#include <autoware_lanelet2_extension/regulatory_elements/road_marking.hpp>  // for lanelet::autoware::RoadMarking
+#include <autoware_lanelet2_extension/utility/query.hpp>
+#include <autoware_lanelet2_extension/utility/utilities.hpp>
+
+#include <Eigen/src/Core/Matrix.h>
+
 namespace autoware::diffusion_planner::preprocess
 {
 void compute_distances(
@@ -72,9 +78,84 @@ void transform_selected_cols(
     transformed_block.block<2, POINTS_PER_SEGMENT>(0, 0);
 }
 
-Eigen::MatrixXf transform_xy_points(
+void add_traffic_light_one_hot_encoding_to_segment(
+  [[maybe_unused]] Eigen::MatrixXf & segment_matrix, const RowLaneIDMaps & row_id_mapping,
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const long row_idx,
+  [[maybe_unused]] const long col_counter)
+{
+  const auto lane_id_itr = row_id_mapping.matrix_row_to_lane_id.find(row_idx);
+  if (lane_id_itr == row_id_mapping.matrix_row_to_lane_id.end()) {
+    throw std::invalid_argument("Invalid lane row to lane id mapping");
+    return;
+  }
+  std::cerr << "checking lane_id_itr " << lane_id_itr->second << "\n";
+  const auto assigned_lanelet = lanelet_map_ptr->laneletLayer.get(lane_id_itr->second);
+  std::cerr << "crashing here? " << lane_id_itr->second << "\n";
+
+  auto tl_reg_elems = assigned_lanelet.regulatoryElementsAs<const lanelet::TrafficLight>();
+  std::cerr << "crashing here?2 " << lane_id_itr->second << "\n";
+
+  if (tl_reg_elems.empty()) {
+    return;
+  }
+  std::cerr << "!wtf\n";
+  const auto tl_reg_elem = tl_reg_elems.front();
+  std::cerr << "checking TL group " << tl_reg_elem->id() << "\n";
+
+  const auto traffic_light_stamped_info_itr = traffic_light_id_map.find(tl_reg_elem->id());
+  if (traffic_light_stamped_info_itr == traffic_light_id_map.end()) {
+    return;
+  }
+  const auto signal = traffic_light_stamped_info_itr->second.signal;
+  std::cerr << "lanelet id " << assigned_lanelet.id() << "\n";
+  Eigen::RowVector4f traffic_light_one_hot_encoding = get_traffic_signal_row_vector(signal);
+  Eigen::MatrixXf one_hot_encoding_matrix =
+    traffic_light_one_hot_encoding.replicate(POINTS_PER_SEGMENT, 1);
+
+  if (traffic_light_one_hot_encoding(3) < 0.1) {
+    std::cerr << "got color\n";
+    for (long row = 0; row < one_hot_encoding_matrix.rows(); row++) {
+      for (long col = 0; col < one_hot_encoding_matrix.cols(); ++col) {
+        std::cerr << one_hot_encoding_matrix(row, col) << ", ";
+      }
+      std::cerr << "\n";
+    }
+  }
+
+  // segment_matrix.block<TRAFFIC_LIGHT_ONE_HOT_DIM, POINTS_PER_SEGMENT>(
+  //   TRAFFIC_LIGHT, col_counter * POINTS_PER_SEGMENT) = one_hot_encoding_matrix;
+}
+
+Eigen::RowVector4f get_traffic_signal_row_vector(
+  const autoware_perception_msgs::msg::TrafficLightGroup & signal)
+{
+  const auto is_green = autoware::traffic_light_utils::hasTrafficLightCircleColor(
+    signal, autoware_perception_msgs::msg::TrafficLightElement::GREEN);
+  const auto is_amber = autoware::traffic_light_utils::hasTrafficLightCircleColor(
+    signal, autoware_perception_msgs::msg::TrafficLightElement::AMBER);
+  const auto is_red = autoware::traffic_light_utils::hasTrafficLightCircleColor(
+    signal, autoware_perception_msgs::msg::TrafficLightElement::RED);
+
+  const bool has_color = (is_green || is_amber || is_red);
+
+  if (
+    static_cast<float>(is_green) + static_cast<float>(is_amber) + static_cast<float>(is_red) >
+    1.f) {
+    throw std::invalid_argument("more than one traffic light");
+    return {};
+  }
+  return {
+    static_cast<float>(is_green), static_cast<float>(is_amber), static_cast<float>(is_red),
+    static_cast<float>(!has_color)};
+}
+
+Eigen::MatrixXf transform_points_and_add_traffic_info(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  const std::vector<RowWithDistance> & distances, long m)
+  const std::vector<RowWithDistance> & distances,
+  [[maybe_unused]] const RowLaneIDMaps & row_id_mapping,
+  [[maybe_unused]] std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  [[maybe_unused]] const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m)
 {
   if (input_matrix.cols() != FULL_MATRIX_COLS || input_matrix.rows() % POINTS_PER_SEGMENT != 0) {
     throw std::invalid_argument("input_matrix size mismatch");
@@ -98,6 +179,10 @@ Eigen::MatrixXf transform_xy_points(
     output_matrix.block<FULL_MATRIX_COLS, POINTS_PER_SEGMENT>(0, col_counter * POINTS_PER_SEGMENT) =
       input_matrix.block<POINTS_PER_SEGMENT, FULL_MATRIX_COLS>(row_idx, 0).transpose();
 
+    // add_traffic_light_one_hot_encoding_to_segment(
+    //   output_matrix, row_id_mapping, traffic_light_id_map, lanelet_map_ptr, row_idx,
+    //   col_counter);
+
     // transform the x and y coordinates
     transform_selected_cols(transform_matrix, output_matrix, col_counter, X);
     // the dx and dy coordinates do not require translation
@@ -120,8 +205,11 @@ Eigen::MatrixXf transform_xy_points(
 }
 
 Eigen::MatrixXf transform_and_select_rows(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, float center_x,
-  float center_y, long m)
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
+  const RowLaneIDMaps & row_id_mapping,
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y,
+  long m)
 {
   const auto n = input_matrix.rows();
   if (n == 0 || input_matrix.cols() != FULL_MATRIX_COLS || m <= 0) {
@@ -135,11 +223,13 @@ Eigen::MatrixXf transform_and_select_rows(
   // Step 2: Sort indices by distance
   sort_indices_by_distance(distances);
   // Step 3: Apply transformation to selected rows
-  return transform_xy_points(input_matrix, transform_matrix, distances, m);
+  return transform_points_and_add_traffic_info(
+    input_matrix, transform_matrix, distances, row_id_mapping, traffic_light_id_map,
+    lanelet_map_ptr, m);
 }
 
 Eigen::MatrixXf process_segments_to_matrix(
-  const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices)
+  const std::vector<LaneSegment> & lane_segments, RowLaneIDMaps & row_id_mapping)
 {
   if (lane_segments.empty()) {
     throw std::runtime_error("Empty lane segment data");
@@ -163,7 +253,8 @@ Eigen::MatrixXf process_segments_to_matrix(
   for (const auto & mat : all_segment_matrices) {
     stacked_matrix.middleRows(current_row, mat.rows()) = mat;
     const auto id = static_cast<int64_t>(mat(0, LANE_ID));
-    segment_row_indices.emplace(id, current_row);
+    row_id_mapping.lane_id_to_matrix_row.emplace(id, current_row);
+    row_id_mapping.matrix_row_to_lane_id.emplace(current_row, id);
     current_row += POINTS_PER_SEGMENT;
   }
   return stacked_matrix;
@@ -199,12 +290,9 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
     case 3:
       traffic_light_vec[0] = 1.0f;
       break;  // GREEN
-    case 4:
-      traffic_light_vec[3] = 1.0f;
-      break;  // WHITE
     default:
       traffic_light_vec[3] = 1.0f;
-      break;  // UNKNOWN
+      break;  // WHITE/UNKNOWN
   }
 
   // Build each row
@@ -249,25 +337,34 @@ std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_s
 
 std::vector<float> get_route_segments(
   const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & map_to_ego_transform,
-  LaneletRoute::ConstSharedPtr route_ptr_, const std::map<int64_t, long> & segment_row_indices,
-  float center_x, float center_y)
+  LaneletRoute::ConstSharedPtr route_ptr_, const RowLaneIDMaps & row_id_mapping,
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y)
 {
   Eigen::MatrixXf full_route_segment_matrix(
     POINTS_PER_SEGMENT * route_ptr_->segments.size(), FULL_MATRIX_COLS);
   long route_segment_rows = 0;
+  long col_counter = 0;
+
   for (const auto & route_segment : route_ptr_->segments) {
-    auto route_segment_row_itr = segment_row_indices.find(route_segment.preferred_primitive.id);
-    if (route_segment_row_itr == segment_row_indices.end()) {
+    auto route_segment_row_itr =
+      row_id_mapping.lane_id_to_matrix_row.find(route_segment.preferred_primitive.id);
+    if (route_segment_row_itr == row_id_mapping.lane_id_to_matrix_row.end()) {
       continue;
     }
     full_route_segment_matrix.block(route_segment_rows, 0, POINTS_PER_SEGMENT, FULL_MATRIX_COLS) =
       map_lane_segments_matrix.block(
         route_segment_row_itr->second, 0, POINTS_PER_SEGMENT, FULL_MATRIX_COLS);
+    add_traffic_light_one_hot_encoding_to_segment(
+      full_route_segment_matrix, row_id_mapping, traffic_light_id_map, lanelet_map_ptr,
+      route_segment_row_itr->second, col_counter);
     route_segment_rows += POINTS_PER_SEGMENT;
+    ++col_counter;
   }
 
   Eigen::MatrixXf ego_centric_route_segments = preprocess::transform_and_select_rows(
-    full_route_segment_matrix, map_to_ego_transform, center_x, center_y, ROUTE_LANES_SHAPE[1]);
+    full_route_segment_matrix, map_to_ego_transform, row_id_mapping, traffic_light_id_map,
+    lanelet_map_ptr, center_x, center_y, ROUTE_LANES_SHAPE[1]);
   const auto total_route_points = ROUTE_LANES_SHAPE[1] * POINTS_PER_SEGMENT;
   Eigen::MatrixXf route_segments_matrix(total_route_points, SEGMENT_POINT_DIM);
   route_segments_matrix.block(0, 0, total_route_points, SEGMENT_POINT_DIM) =

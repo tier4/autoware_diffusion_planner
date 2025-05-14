@@ -17,11 +17,14 @@
 
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
 #include "autoware/diffusion_planner/dimensions.hpp"
+#include "autoware/diffusion_planner/preprocessing/traffic_signals.hpp"
+#include "autoware/traffic_light_utils/traffic_light_utils.hpp"
 
 #include <autoware_perception_msgs/msg/traffic_light_group_array.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <geometry_msgs/msg/detail/point__struct.hpp>
 
+#include <Eigen/src/Core/Matrix.h>
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_core/primitives/CompoundPolygon.h>
 #include <lanelet2_core/primitives/Lanelet.h>
@@ -50,6 +53,12 @@ struct RowWithDistance
   bool inside;             //!< Whether the row is within the mask range.
 };
 
+struct RowLaneIDMaps
+{
+  std::map<lanelet::Id, long> lane_id_to_matrix_row;
+  std::map<long, lanelet::Id> matrix_row_to_lane_id;
+};
+
 /**
  * @brief Extracts route segments from the map lane segments matrix and transforms them to
  * ego-centric coordinates.
@@ -65,8 +74,9 @@ struct RowWithDistance
  */
 std::vector<float> get_route_segments(
   const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & map_to_ego_transform,
-  LaneletRoute::ConstSharedPtr route_ptr_, const std::map<int64_t, long> & segment_row_indices,
-  float center_x, float center_y);
+  LaneletRoute::ConstSharedPtr route_ptr_, const RowLaneIDMaps & row_id_mapping,
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y);
 
 /**
  * @brief Extracts lane tensor data from ego-centric lane segments.
@@ -94,7 +104,7 @@ std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_s
  * @throws std::runtime_error If any segment matrix does not have the expected number of rows.
  */
 Eigen::MatrixXf process_segments_to_matrix(
-  const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices);
+  const std::vector<LaneSegment> & lane_segments, RowLaneIDMaps & row_id_mapping);
 
 /**
  * @brief Processes a single lane segment and converts it into a matrix representation.
@@ -132,6 +142,15 @@ inline void sort_indices_by_distance(std::vector<RowWithDistance> & distances)
   });
 }
 
+void add_traffic_light_one_hot_encoding_to_segment(
+  [[maybe_unused]] Eigen::MatrixXf & segment_matrix, const RowLaneIDMaps & row_id_mapping,
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const long row_idx,
+  [[maybe_unused]] const long col_counter);
+
+Eigen::RowVector4f get_traffic_signal_row_vector(
+  const autoware_perception_msgs::msg::TrafficLightGroup & signal);
+
 /**
  * @brief Transforms selected columns of the output matrix using a transformation matrix.
  *
@@ -154,9 +173,10 @@ void transform_selected_cols(
  * @param m Maximum number of rows to select.
  * @return Transformed matrix containing the selected rows.
  */
-Eigen::MatrixXf transform_xy_points(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  const std::vector<RowWithDistance> & distances, long m);
+Eigen::MatrixXf transform_points_and_add_traffic_info(
+  const Eigen::MatrixXf & input_matrix, [[maybe_unused]] const Eigen::Matrix4f & transform_matrix,
+  [[maybe_unused]] const std::vector<RowWithDistance> & distances,
+  [[maybe_unused]] const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m);
 
 /**
  * @brief Transforms and selects rows from the input matrix based on proximity to a center point.
@@ -170,8 +190,11 @@ Eigen::MatrixXf transform_xy_points(
  * @throws std::invalid_argument If input_matrix dimensions are not correct or if m <= 0.
  */
 Eigen::MatrixXf transform_and_select_rows(
-  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix, float center_x,
-  float center_y, long m);
+  const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
+  const RowLaneIDMaps & row_id_mapping,
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y,
+  long m);
 }  // namespace autoware::diffusion_planner::preprocess
 
 #endif  // AUTOWARE__DIFFUSION_PLANNER__PREPROCESSING__LANE_SEGMENTS_HPP
