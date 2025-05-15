@@ -49,19 +49,19 @@ constexpr size_t AGENT_STATE_DIM = 11;
 
 enum AgentLabel { VEHICLE = 0, PEDESTRIAN = 1, BICYCLE = 2 };
 
-enum AgentDimLabels {
-  X = 0,
-  Y = 1,
-  COS_YAW = 2,
-  SIN_YAW = 3,
-  VX = 4,
-  VY = 5,
-  L = 6,
-  W = 7,
-  LABEL_VEHICLE = 8,
-  LABEL_PEDESTRIAN = 9,
-  LABEL_BICYCLE = 10,
-};
+// enum AgentDimLabels {
+//   X = 0,
+//   Y = 1,
+//   COS_YAW = 2,
+//   SIN_YAW = 3,
+//   VX = 4,
+//   VY = 5,
+//   L = 6,
+//   W = 7,
+//   LABEL_VEHICLE = 8,
+//   LABEL_PEDESTRIAN = 9,
+//   LABEL_BICYCLE = 10,
+// };
 
 AgentLabel get_model_label(const autoware_perception_msgs::msg::TrackedObject & object);
 

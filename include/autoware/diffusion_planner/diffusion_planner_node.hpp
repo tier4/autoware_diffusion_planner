@@ -18,6 +18,8 @@
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
 #include "autoware/diffusion_planner/dimensions.hpp"
+#include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
+#include "autoware/diffusion_planner/preprocessing/traffic_signals.hpp"
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 #include "autoware_utils/ros/polling_subscriber.hpp"
 #include "autoware_utils/system/time_keeper.hpp"
@@ -74,6 +76,8 @@ using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
 using builtin_interfaces::msg::Duration;
 using builtin_interfaces::msg::Time;
 using geometry_msgs::msg::Point;
+using preprocess::RowLaneIDMaps;
+using preprocess::TrafficSignalStamped;
 using rcl_interfaces::msg::SetParametersResult;
 using std_msgs::msg::ColorRGBA;
 using utils::NormalizationMap;
@@ -116,7 +120,7 @@ public:
   MarkerArray create_lane_marker(
     const std::vector<float> & lane_vector, const std::vector<long> & shape, const Time & stamp,
     const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
-    const std::string & ns = "base_link");
+    const std::string & frame_id = "base_link", const bool set_traffic_light_color = false);
 
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
@@ -142,7 +146,8 @@ public:
   std::unique_ptr<LaneletConverter> lanelet_converter_ptr_;
   std::vector<LaneSegment> lane_segments_;
   Eigen::MatrixXf map_lane_segments_matrix_;
-  std::map<int64_t, long> segment_row_indices_;
+  RowLaneIDMaps row_id_mapping_;
+  std::map<lanelet::Id, TrafficSignalStamped> traffic_light_id_map_;
   bool is_map_loaded_{false};
 
   // Node elements
@@ -159,8 +164,9 @@ public:
     sub_current_acceleration_{this, "~/input/acceleration"};
   autoware_utils::InterProcessPollingSubscriber<TrackedObjects> sub_tracked_objects_{
     this, "~/input/tracked_objects"};
-  autoware_utils::InterProcessPollingSubscriber<TrafficSignal> sub_traffic_signal_{
-    this, "~/input/traffic_signals"};
+  autoware_utils::InterProcessPollingSubscriber<
+    autoware_perception_msgs::msg::TrafficLightGroupArray>
+    sub_traffic_signals_{this, "~/input/traffic_signals"};
   autoware_utils::InterProcessPollingSubscriber<
     LaneletRoute, autoware_utils::polling_policy::Newest>
     route_subscriber_{this, "~/input/route", rclcpp::QoS{1}.transient_local()};

@@ -19,6 +19,7 @@
 
 #include "nav_msgs/msg/odometry.hpp"
 
+#include <unordered_map>
 #include <utility>
 
 namespace autoware::diffusion_planner::utils
@@ -43,6 +44,8 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
  * @return A flattened vector of floats with the specified shape and initialized values.
  */
 std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 0.1f);
+
+bool check_input_map(const std::unordered_map<std::string, std::vector<float>> input_map);
 
 }  // namespace autoware::diffusion_planner::utils
 #endif  // AUTOWARE__DIFFUSION_PLANNER__UTILS_HPP_

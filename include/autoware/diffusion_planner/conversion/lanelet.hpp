@@ -216,9 +216,9 @@ public:
    * @param point_break_distance Distance threshold to separate two polylines.
    */
   explicit LaneletConverter(
-    lanelet::LaneletMapConstPtr lanelet_map_ptr, size_t max_num_polyline, size_t max_num_point,
-    float point_break_distance)
-  : lanelet_map_ptr_(std::move(lanelet_map_ptr)),
+    const lanelet::LaneletMapConstPtr lanelet_map_ptr, size_t max_num_polyline,
+    size_t max_num_point, float point_break_distance)
+  : lanelet_map_ptr_(lanelet_map_ptr),
     max_num_polyline_(max_num_polyline),
     max_num_point_(max_num_point),
     point_break_distance_(point_break_distance)

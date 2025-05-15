@@ -14,6 +14,10 @@
 
 #include "autoware/diffusion_planner/utils/utils.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+
 namespace autoware::diffusion_planner::utils
 {
 std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
@@ -60,4 +64,18 @@ std::vector<float> create_float_data(const std::vector<int64_t> & shape, float f
   std::vector<float> data(total_size, fill);
   return data;
 }
+
+bool check_input_map(const std::unordered_map<std::string, std::vector<float>> input_map)
+{
+  for (const auto & tup : input_map) {
+    if (std::any_of(tup.second.begin(), tup.second.end(), [](const auto & v) {
+          return !std::isfinite(v) || std::isnan(v);
+        })) {
+      std::cerr << "key " << tup.first << " contains invalid values\n";
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace autoware::diffusion_planner::utils
