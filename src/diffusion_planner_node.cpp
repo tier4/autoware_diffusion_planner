@@ -167,6 +167,12 @@ MarkerArray DiffusionPlanner::create_lane_marker(
   color.b = colors[2];
   color.a = colors[3];
 
+  ColorRGBA color_bounds;
+  color.r = 1.0;
+  color.g = 0.65;
+  color.b = 0.0;
+  color.a = 0.8;
+
   Duration lifetime;
   lifetime.sec = 0;
   lifetime.nanosec = 1e8;
@@ -184,6 +190,30 @@ MarkerArray DiffusionPlanner::create_lane_marker(
     marker.scale.x = 0.3;
     marker.color = color;
     marker.lifetime = lifetime;
+
+    Marker marker_lb;
+    marker_lb.header.stamp = stamp;
+    marker_lb.header.frame_id = frame_id;
+    marker_lb.ns = "lane_lb";
+    marker_lb.id = static_cast<int>(l);
+    marker_lb.type = Marker::LINE_STRIP;
+    marker_lb.action = Marker::ADD;
+    marker_lb.pose.orientation.w = 1.0;
+    marker_lb.scale.x = 0.2;
+    marker_lb.color = color_bounds;
+    marker_lb.lifetime = lifetime;
+
+    Marker marker_rb;
+    marker_rb.header.stamp = stamp;
+    marker_rb.header.frame_id = frame_id;
+    marker_rb.ns = "lane_rb";
+    marker_rb.id = static_cast<int>(l);
+    marker_rb.type = Marker::LINE_STRIP;
+    marker_rb.action = Marker::ADD;
+    marker_rb.pose.orientation.w = 1.0;
+    marker_rb.scale.x = 0.2;
+    marker_rb.color = color_bounds;
+    marker_rb.lifetime = lifetime;
 
     Marker marker_sphere;
     marker_sphere.header.stamp = stamp;
@@ -215,15 +245,41 @@ MarkerArray DiffusionPlanner::create_lane_marker(
     for (long p = 0; p < P; ++p) {
       auto x = lane_vector[P * D * l + p * D + X];
       auto y = lane_vector[P * D * l + p * D + Y];
+      auto lb_x = lane_vector[P * D * l + p * D + LB_X] + x;
+      auto lb_y = lane_vector[P * D * l + p * D + LB_Y] + y;
+      auto rb_x = lane_vector[P * D * l + p * D + RB_X] + x;
+      auto rb_y = lane_vector[P * D * l + p * D + RB_Y] + y;
+
       float z = 0.5f;
       float norm = std::sqrt(x * x + y * y);
       if (norm < 1e-2) continue;
+
+      std::cerr << "-----Points-----\n";
+      std::cerr << "x " << x << ",";
+      std::cerr << "y " << y << ",";
+      std::cerr << "lb_x " << lb_x << ",";
+      std::cerr << "lb_y " << lb_y << ",";
+      std::cerr << "rb_x " << rb_x << ",";
+      std::cerr << "rb_y " << rb_y << "\n";
+      std::cerr << "----------\n";
 
       Point pt;
       pt.x = x;
       pt.y = y;
       pt.z = z;
       marker.points.push_back(pt);
+
+      Point lb_pt;
+      lb_pt.x = lb_x;
+      lb_pt.y = lb_y;
+      lb_pt.z = z;
+      marker_lb.points.push_back(lb_pt);
+
+      Point rb_pt;
+      rb_pt.x = rb_x;
+      rb_pt.y = rb_y;
+      rb_pt.z = z;
+      marker_rb.points.push_back(rb_pt);
 
       Point pt_sphere;
       pt_sphere.x = x;
@@ -238,6 +294,8 @@ MarkerArray DiffusionPlanner::create_lane_marker(
     }
     if (!marker.points.empty()) {
       marker_array.markers.push_back(marker);
+      marker_array.markers.push_back(marker_lb);
+      marker_array.markers.push_back(marker_rb);
     }
   }
 
