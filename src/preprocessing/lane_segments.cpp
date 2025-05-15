@@ -193,10 +193,10 @@ std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_points_and_add_traffic_info
     }
   }
   // subtract center from boundaries
-  output_matrix.row(LB_X) = output_matrix.row(4) - output_matrix.row(X);
-  output_matrix.row(LB_Y) = output_matrix.row(5) - output_matrix.row(Y);
-  output_matrix.row(RB_X) = output_matrix.row(6) - output_matrix.row(X);
-  output_matrix.row(RB_Y) = output_matrix.row(7) - output_matrix.row(Y);
+  output_matrix.row(LB_X) = output_matrix.row(LB_X) - output_matrix.row(X);
+  output_matrix.row(LB_Y) = output_matrix.row(LB_Y) - output_matrix.row(Y);
+  output_matrix.row(RB_X) = output_matrix.row(RB_X) - output_matrix.row(X);
+  output_matrix.row(RB_Y) = output_matrix.row(RB_Y) - output_matrix.row(Y);
 
   return {output_matrix.transpose(), new_row_id_mapping};
 }
