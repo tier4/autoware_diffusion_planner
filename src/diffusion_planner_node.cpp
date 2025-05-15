@@ -78,8 +78,10 @@ void DiffusionPlanner::set_up_params()
   params_.args_path = this->declare_parameter<std::string>("args_path", "");
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
 
-  debug_params_.publish_debug_map = this->declare_parameter<bool>("publish_debug_map", false);
-  debug_params_.publish_debug_route = this->declare_parameter<bool>("publish_debug_route", false);
+  debug_params_.publish_debug_map =
+    this->declare_parameter<bool>("debug_params.publish_debug_map", false);
+  debug_params_.publish_debug_route =
+    this->declare_parameter<bool>("debug_params.publish_debug_route", false);
   RCLCPP_INFO(get_logger(), "Setting up parameters for Diffusion Planner");
 }
 
@@ -88,8 +90,10 @@ SetParametersResult DiffusionPlanner::on_parameter(
 {
   using autoware_utils::update_param;
   DiffusionPlannerDebugParams temp_debug_params = debug_params_;
-  update_param<bool>(parameters, "publish_debug_map", temp_debug_params.publish_debug_map);
-  update_param<bool>(parameters, "publish_debug_route", temp_debug_params.publish_debug_route);
+  update_param<bool>(
+    parameters, "debug_params.publish_debug_map", temp_debug_params.publish_debug_map);
+  update_param<bool>(
+    parameters, "debug_params.publish_debug_route", temp_debug_params.publish_debug_route);
   debug_params_ = temp_debug_params;
 
   SetParametersResult result;
