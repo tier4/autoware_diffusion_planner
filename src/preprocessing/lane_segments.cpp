@@ -109,9 +109,9 @@ void add_traffic_light_one_hot_encoding_to_segment(
   }
   const auto signal = traffic_light_stamped_info_itr->second.signal;
   std::cerr << "lanelet id " << assigned_lanelet.id() << "\n";
-  Eigen::RowVector4f traffic_light_one_hot_encoding = get_traffic_signal_row_vector(signal);
+  Eigen::Vector4f traffic_light_one_hot_encoding = get_traffic_signal_row_vector(signal);
   Eigen::MatrixXf one_hot_encoding_matrix =
-    traffic_light_one_hot_encoding.replicate(POINTS_PER_SEGMENT, 1);
+    traffic_light_one_hot_encoding.replicate(1, POINTS_PER_SEGMENT);
 
   if (traffic_light_one_hot_encoding(3) < 0.1) {
     std::cerr << "got color\n";
@@ -123,8 +123,9 @@ void add_traffic_light_one_hot_encoding_to_segment(
     }
   }
 
-  // segment_matrix.block<TRAFFIC_LIGHT_ONE_HOT_DIM, POINTS_PER_SEGMENT>(
-  //   TRAFFIC_LIGHT, col_counter * POINTS_PER_SEGMENT) = one_hot_encoding_matrix;
+  segment_matrix.block<TRAFFIC_LIGHT_ONE_HOT_DIM, POINTS_PER_SEGMENT>(
+    TRAFFIC_LIGHT, col_counter * POINTS_PER_SEGMENT) =
+    one_hot_encoding_matrix.block<TRAFFIC_LIGHT_ONE_HOT_DIM, POINTS_PER_SEGMENT>(0, 0);
 }
 
 Eigen::RowVector4f get_traffic_signal_row_vector(
@@ -179,9 +180,8 @@ Eigen::MatrixXf transform_points_and_add_traffic_info(
     output_matrix.block<FULL_MATRIX_COLS, POINTS_PER_SEGMENT>(0, col_counter * POINTS_PER_SEGMENT) =
       input_matrix.block<POINTS_PER_SEGMENT, FULL_MATRIX_COLS>(row_idx, 0).transpose();
 
-    // add_traffic_light_one_hot_encoding_to_segment(
-    //   output_matrix, row_id_mapping, traffic_light_id_map, lanelet_map_ptr, row_idx,
-    //   col_counter);
+    add_traffic_light_one_hot_encoding_to_segment(
+      output_matrix, row_id_mapping, traffic_light_id_map, lanelet_map_ptr, row_idx, col_counter);
 
     // transform the x and y coordinates
     transform_selected_cols(transform_matrix, output_matrix, col_counter, X);
@@ -344,7 +344,6 @@ std::vector<float> get_route_segments(
   Eigen::MatrixXf full_route_segment_matrix(
     POINTS_PER_SEGMENT * route_ptr_->segments.size(), FULL_MATRIX_COLS);
   long route_segment_rows = 0;
-  long col_counter = 0;
 
   for (const auto & route_segment : route_ptr_->segments) {
     auto route_segment_row_itr =
@@ -355,11 +354,7 @@ std::vector<float> get_route_segments(
     full_route_segment_matrix.block(route_segment_rows, 0, POINTS_PER_SEGMENT, FULL_MATRIX_COLS) =
       map_lane_segments_matrix.block(
         route_segment_row_itr->second, 0, POINTS_PER_SEGMENT, FULL_MATRIX_COLS);
-    add_traffic_light_one_hot_encoding_to_segment(
-      full_route_segment_matrix, row_id_mapping, traffic_light_id_map, lanelet_map_ptr,
-      route_segment_row_itr->second, col_counter);
     route_segment_rows += POINTS_PER_SEGMENT;
-    ++col_counter;
   }
 
   Eigen::MatrixXf ego_centric_route_segments = preprocess::transform_and_select_rows(
