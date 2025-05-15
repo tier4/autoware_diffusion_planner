@@ -120,7 +120,7 @@ public:
   MarkerArray create_lane_marker(
     const std::vector<float> & lane_vector, const std::vector<long> & shape, const Time & stamp,
     const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
-    const std::string & ns = "base_link", const bool set_traffic_light_color = false);
+    const std::string & frame_id = "base_link", const bool set_traffic_light_color = false);
 
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;

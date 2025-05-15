@@ -126,40 +126,36 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
 
 MarkerArray DiffusionPlanner::create_lane_marker(
   const std::vector<float> & lane_vector, [[maybe_unused]] const std::vector<long> & shape,
-  const Time & stamp, const std::array<float, 4> colors, const std::string & ns,
+  const Time & stamp, const std::array<float, 4> colors, const std::string & frame_id,
   const bool set_traffic_light_color)
 {
-  auto get_traffic_light_color = [](float g, float y, float r) {
+  auto get_traffic_light_color = [](float g, float y, float r, const ColorRGBA & original_color) {
     ColorRGBA color;
     color.r = 0.0;
     color.g = 0.0;
     color.b = 0.0;
     color.a = 0.8;
-    if (g > 0.1f) {
-      color.g = 0.8;
+    if (static_cast<bool>(g)) {
+      color.g = 1.0;
       return color;
     }
-    if (y > 0.1f) {
-      color.g = 0.6;
-      color.r = 0.6;
-      return color;
-    }
-
-    if (r > 0.1f) {
-      color.r = 0.8;
+    if (static_cast<bool>(y)) {
+      color.g = 1.0;
+      color.r = 1.0;
       return color;
     }
 
-    color.r = 0.9;
-    color.g = 0.9;
-    color.b = 0.9;
-    return color;
+    if (static_cast<bool>(r)) {
+      color.r = 1.0;
+      return color;
+    }
+    return original_color;
   };
 
   MarkerArray marker_array;
   const long P = shape[2];
   const long D = shape[3];
-  long sphere_count = 0;
+  long segment_count = 0;
 
   ColorRGBA color;
   color.r = colors[0];
@@ -175,7 +171,7 @@ MarkerArray DiffusionPlanner::create_lane_marker(
     // Check if the centerline is all zeros
     Marker marker;
     marker.header.stamp = stamp;
-    marker.header.frame_id = ns;
+    marker.header.frame_id = frame_id;
     marker.ns = "lane";
     marker.id = static_cast<int>(l);
     marker.type = Marker::LINE_STRIP;
@@ -187,7 +183,7 @@ MarkerArray DiffusionPlanner::create_lane_marker(
 
     Marker marker_sphere;
     marker_sphere.header.stamp = stamp;
-    marker_sphere.header.frame_id = ns;
+    marker_sphere.header.frame_id = frame_id;
     marker_sphere.ns = "sphere";
     marker_sphere.id = static_cast<int>(l);
     marker_sphere.type = Marker::SPHERE_LIST;
@@ -199,9 +195,9 @@ MarkerArray DiffusionPlanner::create_lane_marker(
     marker_sphere.lifetime = lifetime;
 
     ColorRGBA color_sphere;
-    color_sphere.r = sphere_count % 2 == 0 ? 0.1 : 0.9;
-    color_sphere.g = sphere_count % 2 == 0 ? 0.9 : 0.1;
-    color_sphere.b = 0.0;
+    color_sphere.r = segment_count % 2 == 0 ? 0.1 : 0.9;
+    color_sphere.g = segment_count % 2 == 0 ? 0.9 : 0.1;
+    color_sphere.b = 0.9;
     color_sphere.a = 0.8;
     marker_sphere.color = color_sphere;
 
@@ -209,10 +205,7 @@ MarkerArray DiffusionPlanner::create_lane_marker(
       auto g = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_GREEN];
       auto y = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_YELLOW];
       auto r = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_RED];
-      if (g + y + r > 0.1f) {
-        std::cerr << "I should be having color no?\n";
-      }
-      marker.color = get_traffic_light_color(g, y, r);
+      marker.color = get_traffic_light_color(g, y, r, color);
     }
 
     for (long p = 0; p < P; ++p) {
@@ -231,10 +224,10 @@ MarkerArray DiffusionPlanner::create_lane_marker(
       Point pt_sphere;
       pt_sphere.x = x;
       pt_sphere.y = y;
-      pt_sphere.z = sphere_count % 2 == 0 ? 0.5 : 1.0;
+      pt_sphere.z = segment_count % 2 == 0 ? 0.5 : 1.0;
       marker_sphere.points.push_back(pt_sphere);
     }
-    ++sphere_count;
+    ++segment_count;
 
     if (!marker_sphere.points.empty()) {
       marker_array.markers.push_back(marker_sphere);
@@ -287,17 +280,19 @@ InputDataMap DiffusionPlanner::create_input_data()
   // map data on ego reference frame
   const auto center_x = static_cast<float>(ego_kinematic_state->pose.pose.position.x);
   const auto center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
-  Eigen::MatrixXf ego_centric_lane_segments = preprocess::transform_and_select_rows(
-    map_lane_segments_matrix_, map_to_ego_transform, row_id_mapping_, traffic_light_id_map_,
-    lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
+  std::tuple<Eigen::MatrixXf, RowLaneIDMaps> matrix_mapping_tuple =
+    preprocess::transform_and_select_rows(
+      map_lane_segments_matrix_, map_to_ego_transform, row_id_mapping_, traffic_light_id_map_,
+      lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
+  const Eigen::MatrixXf & ego_centric_lane_segments = std::get<0>(matrix_mapping_tuple);
   input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
   input_data_map["lanes_speed_limit"] =
     preprocess::extract_lane_speed_tensor_data(ego_centric_lane_segments);
 
   // route data on ego reference frame
-  input_data_map["route_lanes"] = preprocess::get_route_segments(
-    map_lane_segments_matrix_, map_to_ego_transform, route_ptr_, row_id_mapping_,
-    traffic_light_id_map_, lanelet_map_ptr_, center_x, center_y);
+  const RowLaneIDMaps & updated_row_id_map = std::get<1>(matrix_mapping_tuple);
+  input_data_map["route_lanes"] =
+    preprocess::get_route_segments(ego_centric_lane_segments, route_ptr_, updated_row_id_map);
   return input_data_map;
 }
 
@@ -320,20 +315,22 @@ void DiffusionPlanner::on_timer()
 
   if (debug_params_.publish_debug_route) {
     auto route_markers = create_lane_marker(
-      input_data_map["route_lanes"], ROUTE_LANES_SHAPE, this->now(), {0.1, 0.8, 0.0, 0.8},
+      input_data_map["route_lanes"], ROUTE_LANES_SHAPE, this->now(), {0.8, 0.8, 0.8, 0.8},
       "base_link", true);
     pub_route_marker_->publish(route_markers);
   }
 
   if (debug_params_.publish_debug_map) {
     auto lane_markers = create_lane_marker(
-      input_data_map["lanes"], LANES_SHAPE, this->now(), {0.1, 0.1, 0.7, 0.8}, "base_link");
+      input_data_map["lanes"], LANES_SHAPE, this->now(), {0.1, 0.1, 0.7, 0.8}, "base_link", true);
     pub_lane_marker_->publish(lane_markers);
   }
 
   // normalization of data
   preprocess::normalize_input_data(input_data_map, normalization_map_);
-
+  if (!utils::check_input_map(input_data_map)) {
+    return;
+  }
   auto ego_current_state = input_data_map["ego_current_state"];
   auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
   auto static_objects = input_data_map["static_objects"];

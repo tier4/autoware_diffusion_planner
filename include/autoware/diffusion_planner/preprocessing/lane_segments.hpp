@@ -63,20 +63,16 @@ struct RowLaneIDMaps
  * @brief Extracts route segments from the map lane segments matrix and transforms them to
  * ego-centric coordinates.
  * @param map_lane_segments_matrix Matrix containing lane segment data in map coordinates.
- * @param map_to_ego_transform Transformation matrix to convert map coordinates to ego-centric
- * coordinates.
  * @param route_ptr_ Shared pointer to the route containing the segments to extract.
- * @param segment_row_indices Map of segment IDs to their corresponding row indices in the lane
+ * @param row_id_mapping Map of segment IDs to their corresponding row indices in the lane
  * segments matrix.
  * @param center_x X-coordinate of the ego vehicle's center.
  * @param center_y Y-coordinate of the ego vehicle's center.
  * @return A flattened vector containing the transformed route segments in ego-centric coordinates.
  */
 std::vector<float> get_route_segments(
-  const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & map_to_ego_transform,
-  LaneletRoute::ConstSharedPtr route_ptr_, const RowLaneIDMaps & row_id_mapping,
-  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
-  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y);
+  const Eigen::MatrixXf & map_lane_segments_matrix, LaneletRoute::ConstSharedPtr route_ptr_,
+  const RowLaneIDMaps & row_id_mapping);
 
 /**
  * @brief Extracts lane tensor data from ego-centric lane segments.
@@ -173,7 +169,7 @@ void transform_selected_cols(
  * @param m Maximum number of rows to select.
  * @return Transformed matrix containing the selected rows.
  */
-Eigen::MatrixXf transform_points_and_add_traffic_info(
+std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_points_and_add_traffic_info(
   const Eigen::MatrixXf & input_matrix, [[maybe_unused]] const Eigen::Matrix4f & transform_matrix,
   [[maybe_unused]] const std::vector<RowWithDistance> & distances,
   [[maybe_unused]] const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m);
@@ -189,12 +185,12 @@ Eigen::MatrixXf transform_points_and_add_traffic_info(
  * @return Transformed matrix containing the selected rows.
  * @throws std::invalid_argument If input_matrix dimensions are not correct or if m <= 0.
  */
-Eigen::MatrixXf transform_and_select_rows(
+std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_and_select_rows(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   const RowLaneIDMaps & row_id_mapping,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y,
-  long m);
+  const long m);
 }  // namespace autoware::diffusion_planner::preprocess
 
 #endif  // AUTOWARE__DIFFUSION_PLANNER__PREPROCESSING__LANE_SEGMENTS_HPP
