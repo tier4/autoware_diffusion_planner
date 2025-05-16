@@ -44,6 +44,7 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   // Initialize the node
   rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("diffusion_planner", options);
   pub_trajectory_ = node->create_publisher<Trajectory>("~/output/trajectory", 1);
+  pub_objects_ = create_publisher<PredictedObjects>("~/output/predicted_objects", rclcpp::QoS(1));
   pub_route_marker_ = node->create_publisher<MarkerArray>("~/debug/route_marker", 10);
   pub_lane_marker_ = node->create_publisher<MarkerArray>("~/debug/lane_marker", 10);
   debug_processing_time_detail_pub_ = node->create_publisher<autoware_utils::ProcessingTimeDetail>(
@@ -123,10 +124,10 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
     agent_data_->update_histories(objects);
   }
 
-  auto ego_centric_data = agent_data_.value();
-  ego_centric_data.apply_transform(map_to_ego_transform);
-  ego_centric_data.trim_to_k_closest_agents();
-  return ego_centric_data;
+  auto ego_centric_agent_data = agent_data_.value();
+  ego_centric_agent_data.apply_transform(map_to_ego_transform);
+  ego_centric_agent_data.trim_to_k_closest_agents();
+  return ego_centric_agent_data;
 }
 
 InputDataMap DiffusionPlanner::create_input_data()
@@ -151,6 +152,7 @@ InputDataMap DiffusionPlanner::create_input_data()
       "no traffic signal received. traffic light info will not be updated");
   }
 
+  ego_kinematic_state_ = *ego_kinematic_state;
   preprocess::process_traffic_signals(traffic_signals, traffic_light_id_map_);
   transforms_ = utils::get_transform_matrix(*ego_kinematic_state);
 
@@ -278,9 +280,20 @@ void DiffusionPlanner::on_timer()
   try {
     auto output =
       session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
-    auto output_trajectory =
-      postprocessing::create_trajectory(output, this->now(), transforms_.first);
+    constexpr long batch_idx = 0;
+    constexpr long ego_agent_idx = 0;
+    auto output_trajectory = postprocessing::create_trajectory(
+      output[0], this->now(), transforms_.first, batch_idx, ego_agent_idx);
     pub_trajectory_->publish(output_trajectory);
+
+    if (agent_data_.has_value()) {
+      auto reduced_agent_data = agent_data_.value();
+      reduced_agent_data.trim_to_k_closest_agents(ego_kinematic_state_.pose.pose.position);
+      auto predicted_objects = postprocessing::create_predicted_objects(
+        output[0], reduced_agent_data, this->now(), transforms_.first);
+      pub_objects_->publish(predicted_objects);
+    }
+
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
   }

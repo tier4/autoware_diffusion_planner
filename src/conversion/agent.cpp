@@ -41,7 +41,7 @@ AgentLabel get_model_label(const autoware_perception_msgs::msg::TrackedObject & 
 AgentState::AgentState(TrackedObject & object)
 {
   position_ = object.kinematics.pose_with_covariance.pose.position;
-  dimension_ = object.shape.dimensions;
+  shape_ = object.shape;
   float yaw =
     autoware_utils_geometry::get_rpy(object.kinematics.pose_with_covariance.pose.orientation).z;
   yaw_ = yaw;
@@ -50,22 +50,24 @@ AgentState::AgentState(TrackedObject & object)
   velocity_ = object.kinematics.twist_with_covariance.twist.linear;
   label_ = get_model_label(object);
   object_id_ = autoware_utils_uuid::to_hex_string(object.object_id);
+  autoware_label_ = autoware::object_recognition_utils::getHighestProbLabel(object.classification);
+  tracked_object_info_ = object;
 }
 
-AgentState::AgentState(
-  const geometry_msgs::msg::Point & position, const geometry_msgs::msg::Vector3 & dimension,
-  float yaw, const geometry_msgs::msg::Vector3 & velocity, const AgentLabel & label,
-  std::string object_id)
-: position_(position),
-  dimension_(dimension),
-  yaw_(yaw),
-  cos_yaw_(std::cos(yaw)),
-  sin_yaw_(std::sin(yaw)),
-  velocity_(velocity),
-  label_(label),
-  object_id_(std::move(object_id))
-{
-}
+// AgentState::AgentState(
+//   const geometry_msgs::msg::Point & position, const geometry_msgs::msg::Vector3 & dimension,
+//   float yaw, const geometry_msgs::msg::Vector3 & velocity, const AgentLabel & label,
+//   std::string object_id)
+// : position_(position),
+//   dimension_(dimension),
+//   yaw_(yaw),
+//   cos_yaw_(std::cos(yaw)),
+//   sin_yaw_(std::sin(yaw)),
+//   velocity_(velocity),
+//   label_(label),
+//   object_id_(std::move(object_id))
+// {
+// }
 
 void AgentState::apply_transform(const Eigen::Matrix4f & transform)
 {
@@ -127,6 +129,7 @@ AgentHistory::AgentHistory(
 : queue_(max_time_length),
   object_id_(state.object_id_),
   label_id_(label_id),
+  autoware_label_(state.autoware_label_),
   latest_time_(current_time),
   max_size_(max_time_length)
 {
