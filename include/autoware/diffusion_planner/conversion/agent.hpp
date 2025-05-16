@@ -31,6 +31,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -45,6 +46,7 @@ namespace autoware::diffusion_planner
 {
 using autoware_perception_msgs::msg::TrackedObject;
 
+using autoware_perception_msgs::msg::ObjectClassification;
 constexpr size_t AGENT_STATE_DIM = 11;
 
 enum AgentLabel { VEHICLE = 0, PEDESTRIAN = 1, BICYCLE = 2 };
@@ -84,16 +86,19 @@ struct AgentState
    * @param velocity Velocity [m/s].
    * @param label Agent label
    */
-  AgentState(
-    const geometry_msgs::msg::Point & position, const geometry_msgs::msg::Vector3 & dimension,
-    float yaw, const geometry_msgs::msg::Vector3 & velocity, const AgentLabel & label,
-    std::string object_id);
+  // AgentState(
+  //   const geometry_msgs::msg::Point & position, const geometry_msgs::msg::Vector3 & dimension,
+  //   float yaw, const geometry_msgs::msg::Vector3 & velocity, const AgentLabel & label,
+  //   std::string object_id);
 
   // Construct a new instance filling all elements by `0.0f`.
   static AgentState empty() noexcept { return {}; }
 
   // Return the agent state dimensions `D`.
   static size_t dim() { return AGENT_STATE_DIM; }
+
+  // Return shape
+  [[nodiscard]] autoware_perception_msgs::msg::Shape shape() const { return shape_; }
 
   // Return the x position.
   [[nodiscard]] float x() const { return static_cast<float>(position_.x); }
@@ -105,10 +110,10 @@ struct AgentState
   [[nodiscard]] float z() const { return static_cast<float>(position_.z); }
 
   // Return the length of object size.
-  [[nodiscard]] float length() const { return static_cast<float>(dimension_.x); }
+  [[nodiscard]] float length() const { return static_cast<float>(shape_.dimensions.x); }
 
   // Return the width of object size.
-  [[nodiscard]] float width() const { return static_cast<float>(dimension_.y); }
+  [[nodiscard]] float width() const { return static_cast<float>(shape_.dimensions.y); }
 
   // Return the cos of yaw.
   [[nodiscard]] float cos_yaw() const { return cos_yaw_; }
@@ -122,6 +127,9 @@ struct AgentState
   // Return the y velocity.
   [[nodiscard]] float vy() const { return static_cast<float>(velocity_.y); }
 
+  // Return TrackedObject info
+  [[nodiscard]] TrackedObject tracked_object() const { return tracked_object_info_; }
+
   void apply_transform(const Eigen::Matrix4f & transform);
 
   [[nodiscard]] std::string to_string() const;
@@ -130,13 +138,15 @@ struct AgentState
   [[nodiscard]] std::array<float, AGENT_STATE_DIM> as_array() const noexcept;
 
   geometry_msgs::msg::Point position_;
-  geometry_msgs::msg::Vector3 dimension_;
+  autoware_perception_msgs::msg::Shape shape_;
   float yaw_{0.0f};
   float cos_yaw_{0.0f};
   float sin_yaw_{0.0f};
   geometry_msgs::msg::Vector3 velocity_;
   AgentLabel label_{AgentLabel::VEHICLE};
+  uint8_t autoware_label_;
   std::string object_id_;
+  TrackedObject tracked_object_info_;
 };
 
 /**
@@ -174,6 +184,9 @@ struct AgentHistory
 
   // Return the label id.
   [[nodiscard]] size_t label_id() const { return label_id_; }
+
+  // Return autoware_label
+  [[nodiscard]] uint8_t autoware_label() const { return autoware_label_; }
 
   /**
    * @brief Return the last timestamp when non-empty state was pushed.
@@ -246,6 +259,7 @@ struct AgentHistory
   FixedQueue<AgentState> queue_;
   std::string object_id_;
   size_t label_id_;
+  uint8_t autoware_label_;
   double latest_time_;
   size_t max_size_;
 };
@@ -309,6 +323,8 @@ struct AgentData
 
   // Copy the data to a vector
   std::vector<float> as_vector() const noexcept { return data_; }
+
+  std::vector<AgentHistory> get_histories() const { return histories_; }
 
 private:
   std::vector<AgentHistory> histories_;

@@ -40,14 +40,13 @@
 #include "std_msgs/msg/color_rgba.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
-#include <autoware_map_msgs/msg/detail/lanelet_map_bin__struct.hpp>
 #include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
-#include <autoware_perception_msgs/msg/detail/tracked_objects__struct.hpp>
+#include <autoware_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_perception_msgs/msg/tracked_objects.hpp>
 #include <autoware_perception_msgs/msg/traffic_signal.hpp>
-#include <autoware_planning_msgs/msg/detail/trajectory_point__struct.hpp>
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
+#include <autoware_planning_msgs/msg/trajectory_point.hpp>
 
 #include <Eigen/src/Core/Matrix.h>
 #include <lanelet2_core/LaneletMap.h>
@@ -65,6 +64,7 @@ namespace autoware::diffusion_planner
 {
 using autoware::diffusion_planner::AgentData;
 using autoware_map_msgs::msg::LaneletMapBin;
+using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_perception_msgs::msg::TrackedObjects;
 using autoware_planning_msgs::msg::LaneletRoute;
 using autoware_planning_msgs::msg::Trajectory;
@@ -116,6 +116,9 @@ public:
   Trajectory create_trajectory(
     std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map);
 
+  // current state
+  Odometry ego_kinematic_state_;
+
   // onnxruntime
   OrtCUDAProviderOptions cuda_options_;
   Ort::Env env_;
@@ -149,6 +152,7 @@ public:
   rclcpp::Publisher<autoware_utils::ProcessingTimeDetail>::SharedPtr
     debug_processing_time_detail_pub_;
   rclcpp::Publisher<Trajectory>::SharedPtr pub_trajectory_{nullptr};
+  rclcpp::Publisher<PredictedObjects>::SharedPtr pub_objects_{nullptr};
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_lane_marker_{nullptr};
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_route_marker_{nullptr};
   mutable std::shared_ptr<autoware_utils::TimeKeeper> time_keeper_{nullptr};
