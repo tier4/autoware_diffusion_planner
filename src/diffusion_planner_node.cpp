@@ -19,6 +19,7 @@
 #include "autoware/diffusion_planner/dimensions.hpp"
 #include "autoware/diffusion_planner/postprocessing/postprocessing_utils.hpp"
 #include "autoware/diffusion_planner/preprocessing/preprocessing_utils.hpp"
+#include "autoware/diffusion_planner/utils/marker_utils.hpp"
 #include "autoware/diffusion_planner/utils/utils.hpp"
 #include "onnxruntime_cxx_api.h"
 
@@ -128,180 +129,6 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
   return ego_centric_data;
 }
 
-MarkerArray DiffusionPlanner::create_lane_marker(
-  const std::vector<float> & lane_vector, [[maybe_unused]] const std::vector<long> & shape,
-  const Time & stamp, const std::array<float, 4> colors, const std::string & frame_id,
-  const bool set_traffic_light_color)
-{
-  auto get_traffic_light_color = [](float g, float y, float r, const ColorRGBA & original_color) {
-    ColorRGBA color;
-    color.r = 0.0;
-    color.g = 0.0;
-    color.b = 0.0;
-    color.a = 0.8;
-    if (static_cast<bool>(g)) {
-      color.g = 1.0;
-      return color;
-    }
-    if (static_cast<bool>(y)) {
-      color.g = 1.0;
-      color.r = 1.0;
-      return color;
-    }
-
-    if (static_cast<bool>(r)) {
-      color.r = 1.0;
-      return color;
-    }
-    return original_color;
-  };
-
-  MarkerArray marker_array;
-  const long P = shape[2];
-  const long D = shape[3];
-  long segment_count = 0;
-
-  ColorRGBA color;
-  color.r = colors[0];
-  color.g = colors[1];
-  color.b = colors[2];
-  color.a = colors[3];
-
-  ColorRGBA color_bounds;
-  color.r = 1.0;
-  color.g = 0.65;
-  color.b = 0.0;
-  color.a = 0.8;
-
-  Duration lifetime;
-  lifetime.sec = 0;
-  lifetime.nanosec = 1e8;
-
-  for (size_t l = 0; l < lane_vector.size() / (P * D); ++l) {
-    // Check if the centerline is all zeros
-    Marker marker;
-    marker.header.stamp = stamp;
-    marker.header.frame_id = frame_id;
-    marker.ns = "lane";
-    marker.id = static_cast<int>(l);
-    marker.type = Marker::LINE_STRIP;
-    marker.action = Marker::ADD;
-    marker.pose.orientation.w = 1.0;
-    marker.scale.x = 0.3;
-    marker.color = color;
-    marker.lifetime = lifetime;
-
-    Marker marker_lb;
-    marker_lb.header.stamp = stamp;
-    marker_lb.header.frame_id = frame_id;
-    marker_lb.ns = "lane_lb";
-    marker_lb.id = static_cast<int>(l);
-    marker_lb.type = Marker::LINE_STRIP;
-    marker_lb.action = Marker::ADD;
-    marker_lb.pose.orientation.w = 1.0;
-    marker_lb.scale.x = 0.2;
-    marker_lb.color = color_bounds;
-    marker_lb.lifetime = lifetime;
-
-    Marker marker_rb;
-    marker_rb.header.stamp = stamp;
-    marker_rb.header.frame_id = frame_id;
-    marker_rb.ns = "lane_rb";
-    marker_rb.id = static_cast<int>(l);
-    marker_rb.type = Marker::LINE_STRIP;
-    marker_rb.action = Marker::ADD;
-    marker_rb.pose.orientation.w = 1.0;
-    marker_rb.scale.x = 0.2;
-    marker_rb.color = color_bounds;
-    marker_rb.lifetime = lifetime;
-
-    Marker marker_sphere;
-    marker_sphere.header.stamp = stamp;
-    marker_sphere.header.frame_id = frame_id;
-    marker_sphere.ns = "sphere";
-    marker_sphere.id = static_cast<int>(l);
-    marker_sphere.type = Marker::SPHERE_LIST;
-    marker_sphere.action = Marker::ADD;
-    marker_sphere.pose.orientation.w = 1.0;
-    marker_sphere.scale.x = 0.5;
-    marker_sphere.scale.y = 0.5;
-    marker_sphere.scale.z = 0.5;
-    marker_sphere.lifetime = lifetime;
-
-    ColorRGBA color_sphere;
-    color_sphere.r = segment_count % 2 == 0 ? 0.1 : 0.9;
-    color_sphere.g = segment_count % 2 == 0 ? 0.9 : 0.1;
-    color_sphere.b = 0.9;
-    color_sphere.a = 0.8;
-    marker_sphere.color = color_sphere;
-
-    if (set_traffic_light_color) {
-      auto g = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_GREEN];
-      auto y = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_YELLOW];
-      auto r = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_RED];
-      marker.color = get_traffic_light_color(g, y, r, color);
-    }
-
-    for (long p = 0; p < P; ++p) {
-      auto x = lane_vector[P * D * l + p * D + X];
-      auto y = lane_vector[P * D * l + p * D + Y];
-      auto lb_x = lane_vector[P * D * l + p * D + LB_X] + x;
-      auto lb_y = lane_vector[P * D * l + p * D + LB_Y] + y;
-      auto rb_x = lane_vector[P * D * l + p * D + RB_X] + x;
-      auto rb_y = lane_vector[P * D * l + p * D + RB_Y] + y;
-
-      float z = 0.5f;
-      float norm = std::sqrt(x * x + y * y);
-      if (norm < 1e-2) continue;
-
-      std::cerr << "-----Points-----\n";
-      std::cerr << "x " << x << ",";
-      std::cerr << "y " << y << ",";
-      std::cerr << "lb_x " << lb_x << ",";
-      std::cerr << "lb_y " << lb_y << ",";
-      std::cerr << "rb_x " << rb_x << ",";
-      std::cerr << "rb_y " << rb_y << "\n";
-      std::cerr << "----------\n";
-
-      Point pt;
-      pt.x = x;
-      pt.y = y;
-      pt.z = z;
-      marker.points.push_back(pt);
-
-      Point lb_pt;
-      lb_pt.x = lb_x;
-      lb_pt.y = lb_y;
-      lb_pt.z = z;
-      marker_lb.points.push_back(lb_pt);
-
-      Point rb_pt;
-      rb_pt.x = rb_x;
-      rb_pt.y = rb_y;
-      rb_pt.z = z;
-      marker_rb.points.push_back(rb_pt);
-
-      Point pt_sphere;
-      pt_sphere.x = x;
-      pt_sphere.y = y;
-      pt_sphere.z = segment_count % 2 == 0 ? 0.5 : 1.0;
-      marker_sphere.points.push_back(pt_sphere);
-    }
-    ++segment_count;
-
-    if (!marker_sphere.points.empty()) {
-      marker_array.markers.push_back(marker_sphere);
-    }
-    if (!marker.points.empty()) {
-      marker_array.markers.push_back(marker);
-      marker_array.markers.push_back(marker_lb);
-      marker_array.markers.push_back(marker_rb);
-    }
-  }
-
-  return marker_array;
-}
-
 InputDataMap DiffusionPlanner::create_input_data()
 {
   InputDataMap input_data_map;
@@ -376,15 +203,18 @@ void DiffusionPlanner::on_timer()
   }
 
   if (debug_params_.publish_debug_route) {
-    auto route_markers = create_lane_marker(
-      input_data_map["route_lanes"], ROUTE_LANES_SHAPE, this->now(), {0.8, 0.8, 0.8, 0.8},
+    auto lifetime = rclcpp::Duration::from_seconds(0.1);
+    auto route_markers = utils::create_lane_marker(
+      input_data_map["route_lanes"], ROUTE_LANES_SHAPE, this->now(), lifetime, {0.8, 0.8, 0.8, 0.8},
       "base_link", true);
     pub_route_marker_->publish(route_markers);
   }
 
   if (debug_params_.publish_debug_map) {
-    auto lane_markers = create_lane_marker(
-      input_data_map["lanes"], LANES_SHAPE, this->now(), {0.1, 0.1, 0.7, 0.8}, "base_link", true);
+    auto lifetime = rclcpp::Duration::from_seconds(0.1);
+    auto lane_markers = utils::create_lane_marker(
+      input_data_map["lanes"], LANES_SHAPE, this->now(), lifetime, {0.1, 0.1, 0.7, 0.8},
+      "base_link", true);
     pub_lane_marker_->publish(lane_markers);
   }
 
