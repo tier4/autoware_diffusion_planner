@@ -34,6 +34,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <vector>
 
 namespace autoware::diffusion_planner
@@ -216,23 +217,8 @@ InputDataMap DiffusionPlanner::create_input_data()
   return input_data_map;
 }
 
-void DiffusionPlanner::on_timer()
+void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map)
 {
-  // Timer callback function
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
-
-  if (!is_map_loaded_) {
-    RCLCPP_INFO(get_logger(), "Waiting for map data...");
-    return;
-  }
-
-  // Prepare input data for the model
-  auto input_data_map = create_input_data();
-  if (input_data_map.empty()) {
-    RCLCPP_WARN(get_logger(), "No input data available for inference");
-    return;
-  }
-
   if (debug_params_.publish_debug_route) {
     auto lifetime = rclcpp::Duration::from_seconds(0.1);
     auto route_markers = utils::create_lane_marker(
@@ -248,22 +234,38 @@ void DiffusionPlanner::on_timer()
       "base_link", true);
     pub_lane_marker_->publish(lane_markers);
   }
+}
 
-  // normalization of data
-  preprocess::normalize_input_data(input_data_map, normalization_map_);
-  if (!utils::check_input_map(input_data_map)) {
-    return;
+void DiffusionPlanner::publish_predictions(Ort::Value & predictions)
+{
+  constexpr long batch_idx = 0;
+  constexpr long ego_agent_idx = 0;
+  auto output_trajectory = postprocessing::create_trajectory(
+    predictions, this->now(), transforms_.first, batch_idx, ego_agent_idx);
+  pub_trajectory_->publish(output_trajectory);
+
+  // Other agents prediction
+  if (params_.predict_neighbor_trajectory && agent_data_.has_value()) {
+    auto reduced_agent_data = agent_data_.value();
+    reduced_agent_data.trim_to_k_closest_agents(ego_kinematic_state_.pose.pose.position);
+    auto predicted_objects = postprocessing::create_predicted_objects(
+      predictions, reduced_agent_data, this->now(), transforms_.first);
+    pub_objects_->publish(predicted_objects);
   }
-  auto ego_current_state = input_data_map["ego_current_state"];
-  auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
-  auto static_objects = input_data_map["static_objects"];
-  auto lanes = input_data_map["lanes"];
-  auto lanes_speed_limit = input_data_map["lanes_speed_limit"];
-  auto route_lanes = input_data_map["route_lanes"];
+}
+
+std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
+{
+  auto & ego_current_state = input_data_map["ego_current_state"];
+  auto & neighbor_agents_past = input_data_map["neighbor_agents_past"];
+  auto & static_objects = input_data_map["static_objects"];
+  auto & lanes = input_data_map["lanes"];
+  auto & lanes_speed_limit = input_data_map["lanes_speed_limit"];
+  auto & route_lanes = input_data_map["route_lanes"];
 
   // Allocate raw memory for bool array
   size_t lane_speed_tensor_num_elements = std::accumulate(
-    LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<int64_t>());
+    LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
   auto raw_speed_bool_array =
     std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
 
@@ -307,26 +309,46 @@ void DiffusionPlanner::on_timer()
   const char * output_names[] = {"output"};
   // run inference
   try {
-    auto output =
-      session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
-    constexpr long batch_idx = 0;
-    constexpr long ego_agent_idx = 0;
-    auto output_trajectory = postprocessing::create_trajectory(
-      output[0], this->now(), transforms_.first, batch_idx, ego_agent_idx);
-    pub_trajectory_->publish(output_trajectory);
-
-    // Other agents prediction
-    if (params_.predict_neighbor_trajectory && agent_data_.has_value()) {
-      auto reduced_agent_data = agent_data_.value();
-      reduced_agent_data.trim_to_k_closest_agents(ego_kinematic_state_.pose.pose.position);
-      auto predicted_objects = postprocessing::create_predicted_objects(
-        output[0], reduced_agent_data, this->now(), transforms_.first);
-      pub_objects_->publish(predicted_objects);
-    }
+    return session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
 
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
+    return std::nullopt;
   }
+}
+
+void DiffusionPlanner::on_timer()
+{
+  // Timer callback function
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+
+  if (!is_map_loaded_) {
+    RCLCPP_INFO(get_logger(), "Waiting for map data...");
+    return;
+  }
+
+  // Prepare input data for the model
+  auto input_data_map = create_input_data();
+  if (input_data_map.empty()) {
+    RCLCPP_WARN(get_logger(), "No input data available for inference");
+    return;
+  }
+
+  publish_debug_markers(input_data_map);
+
+  // normalization of data
+  preprocess::normalize_input_data(input_data_map, normalization_map_);
+  if (!utils::check_input_map(input_data_map)) {
+    RCLCPP_WARN(get_logger(), "Input data contains invalid values");
+    return;
+  }
+
+  auto output = do_inference(input_data_map);
+  if (!output) {
+    return;
+  }
+  auto & predictions = output.value()[0];
+  publish_predictions(predictions);
 }
 
 void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
