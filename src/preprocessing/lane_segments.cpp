@@ -88,6 +88,9 @@ void add_traffic_light_one_hot_encoding_to_segment(
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const long row_idx,
   [[maybe_unused]] const long col_counter)
 {
+  if (traffic_light_id_map.empty()) {
+    return;
+  }
   const auto lane_id_itr = row_id_mapping.matrix_row_to_lane_id.find(row_idx);
   if (lane_id_itr == row_id_mapping.matrix_row_to_lane_id.end()) {
     throw std::invalid_argument("Invalid lane row to lane id mapping");

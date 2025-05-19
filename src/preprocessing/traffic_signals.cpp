@@ -18,14 +18,23 @@ namespace autoware::diffusion_planner::preprocess
 {
 void process_traffic_signals(
   const autoware_perception_msgs::msg::TrafficLightGroupArray::ConstSharedPtr msg,
-  std::map<lanelet::Id, TrafficSignalStamped> & traffic_signal_id_map)
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_signal_id_map,
+  const rclcpp::Time & current_time, const double time_threshold_seconds)
 {
   // clear previous observation
-  traffic_signal_id_map.clear();
-
   if (!msg) {
     return;
   }
+
+  rclcpp::Time msg_time = msg->stamp;
+  const auto time_diff = (current_time - msg_time).seconds();
+  if (time_diff > time_threshold_seconds) {
+    std::cerr << "WARNING(" << __func__
+              << ") TrafficLightGroupArray message is too old. Message discarded.\n";
+    // Discard outdated message
+    return;
+  }
+
   for (const auto & signal : msg->traffic_light_groups) {
     TrafficSignalStamped traffic_signal;
     traffic_signal.stamp = msg->stamp;

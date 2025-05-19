@@ -17,6 +17,9 @@
 
 #include "rclcpp/rclcpp.hpp"
 
+#include <rclcpp/duration.hpp>
+#include <rclcpp/time.hpp>
+
 #include <autoware_perception_msgs/msg/detail/traffic_light_group__struct.hpp>
 #include <autoware_perception_msgs/msg/detail/traffic_light_group_array__struct.hpp>
 #include <autoware_perception_msgs/msg/traffic_signal.hpp>
@@ -38,7 +41,8 @@ struct TrafficSignalStamped
 
 void process_traffic_signals(
   const autoware_perception_msgs::msg::TrafficLightGroupArray::ConstSharedPtr msg,
-  std::map<lanelet::Id, TrafficSignalStamped> & traffic_signal_id_map);
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_signal_id_map,
+  const rclcpp::Time & current_time, const double time_threshold_seconds);
 
 }  // namespace autoware::diffusion_planner::preprocess
 #endif  // AUTOWARE__DIFFUSION_PLANNER__PREPROCESSING__TRAFFIC_SIGNALS_HPP

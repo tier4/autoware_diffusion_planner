@@ -88,6 +88,9 @@ struct DiffusionPlannerParams
   std::string model_path;
   std::string args_path;
   double planning_frequency_hz;
+  bool predict_neighbor_trajectory;
+  bool update_traffic_light_group_info;
+  double traffic_light_group_msg_timeout_seconds;
 };
 struct DiffusionPlannerDebugParams
 {
@@ -144,7 +147,6 @@ public:
   std::vector<LaneSegment> lane_segments_;
   Eigen::MatrixXf map_lane_segments_matrix_;
   RowLaneIDMaps row_id_mapping_;
-  std::map<lanelet::Id, TrafficSignalStamped> traffic_light_id_map_;
   bool is_map_loaded_{false};
 
   // Node elements
@@ -172,9 +174,6 @@ public:
     LaneletMapBin, autoware_utils::polling_policy::Newest>
     vector_map_subscriber_{this, "~/input/vector_map", rclcpp::QoS{1}.transient_local()};
   rclcpp::Subscription<HADMapBin>::SharedPtr sub_map_;
-
-  tf2_ros::Buffer tf_buffer_{get_clock()};
-  tf2_ros::TransformListener tf_listener_{tf_buffer_};
 };
 
 std::vector<float> load_tensor(const std::string & filename)
