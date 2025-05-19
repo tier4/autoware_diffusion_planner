@@ -21,25 +21,19 @@
 #include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
 #include "autoware/diffusion_planner/preprocessing/traffic_signals.hpp"
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
-#include "autoware_utils/ros/polling_subscriber.hpp"
-#include "autoware_utils/system/time_keeper.hpp"
-#include "builtin_interfaces/msg/duration.hpp"
-#include "builtin_interfaces/msg/time.hpp"
-#include "rclcpp/rclcpp.hpp"
 
 #include <Eigen/Dense>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
+#include <autoware_utils/ros/polling_subscriber.hpp>
 #include <autoware_utils/ros/update_param.hpp>
+#include <autoware_utils/system/time_keeper.hpp>
 #include <autoware_vehicle_info_utils/vehicle_info_utils.hpp>
+#include <builtin_interfaces/msg/duration.hpp>
+#include <builtin_interfaces/msg/time.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <rclcpp/subscription.hpp>
 #include <rclcpp/timer.hpp>
 
-#include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
-#include "geometry_msgs/msg/point.hpp"
-#include "nav_msgs/msg/odometry.hpp"
-#include "std_msgs/msg/color_rgba.hpp"
-#include "visualization_msgs/msg/marker.hpp"
-#include "visualization_msgs/msg/marker_array.hpp"
 #include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
 #include <autoware_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_perception_msgs/msg/tracked_objects.hpp>
@@ -47,6 +41,12 @@
 #include <autoware_planning_msgs/msg/lanelet_route.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
 #include <autoware_planning_msgs/msg/trajectory_point.hpp>
+#include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <std_msgs/msg/color_rgba.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <Eigen/src/Core/Matrix.h>
 #include <lanelet2_core/LaneletMap.h>
@@ -106,8 +106,8 @@ public:
   void on_timer();
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
   void load_model(const std::string & model_path);
-  void publish_debug_markers(InputDataMap & input_data_map);
-  void publish_predictions(Ort::Value & predictions);
+  void publish_debug_markers(InputDataMap & input_data_map) const;
+  void publish_predictions(Ort::Value & predictions) const;
   std::optional<std::vector<Ort::Value>> do_inference(InputDataMap & input_data_map);
   SetParametersResult on_parameter(const std::vector<rclcpp::Parameter> & parameters);
   InputDataMap create_input_data();

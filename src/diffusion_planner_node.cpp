@@ -217,7 +217,7 @@ InputDataMap DiffusionPlanner::create_input_data()
   return input_data_map;
 }
 
-void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map)
+void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map) const
 {
   if (debug_params_.publish_debug_route) {
     auto lifetime = rclcpp::Duration::from_seconds(0.1);
@@ -236,7 +236,7 @@ void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map)
   }
 }
 
-void DiffusionPlanner::publish_predictions(Ort::Value & predictions)
+void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
 {
   constexpr long batch_idx = 0;
   constexpr long ego_agent_idx = 0;
@@ -310,7 +310,6 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
   // run inference
   try {
     return session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
-
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
     return std::nullopt;
