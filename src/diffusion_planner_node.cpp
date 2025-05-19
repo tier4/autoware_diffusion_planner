@@ -76,10 +76,18 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
 
 void DiffusionPlanner::set_up_params()
 {
+  // node params
   params_.model_path = this->declare_parameter<std::string>("onnx_model_path", "");
   params_.args_path = this->declare_parameter<std::string>("args_path", "");
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
+  params_.predict_neighbor_trajectory =
+    this->declare_parameter<bool>("predict_neighbor_trajectory", false);
+  params_.update_traffic_light_group_info =
+    this->declare_parameter<bool>("update_traffic_light_group_info", false);
+  params_.traffic_light_group_msg_timeout_seconds =
+    this->declare_parameter<double>("traffic_light_group_msg_timeout_seconds", 0.2);
 
+  // debug params
   debug_params_.publish_debug_map =
     this->declare_parameter<bool>("debug_params.publish_debug_map", false);
   debug_params_.publish_debug_route =
@@ -91,12 +99,27 @@ SetParametersResult DiffusionPlanner::on_parameter(
   [[maybe_unused]] const std::vector<rclcpp::Parameter> & parameters)
 {
   using autoware_utils::update_param;
-  DiffusionPlannerDebugParams temp_debug_params = debug_params_;
-  update_param<bool>(
-    parameters, "debug_params.publish_debug_map", temp_debug_params.publish_debug_map);
-  update_param<bool>(
-    parameters, "debug_params.publish_debug_route", temp_debug_params.publish_debug_route);
-  debug_params_ = temp_debug_params;
+  {
+    DiffusionPlannerParams temp_params = params_;
+    update_param<bool>(
+      parameters, "predict_neighbor_trajectory", temp_params.predict_neighbor_trajectory);
+    params_ = temp_params;
+    update_param<bool>(
+      parameters, "update_traffic_light_group_info", temp_params.update_traffic_light_group_info);
+    update_param<double>(
+      parameters, "traffic_light_group_msg_timeout_seconds",
+      temp_params.traffic_light_group_msg_timeout_seconds);
+    params_ = temp_params;
+  }
+
+  {
+    DiffusionPlannerDebugParams temp_debug_params = debug_params_;
+    update_param<bool>(
+      parameters, "debug_params.publish_debug_map", temp_debug_params.publish_debug_map);
+    update_param<bool>(
+      parameters, "debug_params.publish_debug_route", temp_debug_params.publish_debug_route);
+    debug_params_ = temp_debug_params;
+  }
 
   SetParametersResult result;
   result.successful = true;
@@ -132,6 +155,7 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
 
 InputDataMap DiffusionPlanner::create_input_data()
 {
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   InputDataMap input_data_map;
   auto objects = sub_tracked_objects_.take_data();
   auto ego_kinematic_state = sub_current_odometry_.take_data();
@@ -146,14 +170,19 @@ InputDataMap DiffusionPlanner::create_input_data()
     return {};
   }
 
-  if (!traffic_signals) {
-    RCLCPP_WARN_THROTTLE(
-      this->get_logger(), *this->get_clock(), 5000,
-      "no traffic signal received. traffic light info will not be updated");
+  std::map<lanelet::Id, TrafficSignalStamped> traffic_light_id_map;
+  if (params_.update_traffic_light_group_info) {
+    const auto & traffic_light_msg_timeout_s = params_.traffic_light_group_msg_timeout_seconds;
+    preprocess::process_traffic_signals(
+      traffic_signals, traffic_light_id_map, this->now(), traffic_light_msg_timeout_s);
+    if (!traffic_signals) {
+      RCLCPP_WARN_THROTTLE(
+        this->get_logger(), *this->get_clock(), 5000,
+        "no traffic signal received. traffic light info will not be updated/used");
+    }
   }
 
   ego_kinematic_state_ = *ego_kinematic_state;
-  preprocess::process_traffic_signals(traffic_signals, traffic_light_id_map_);
   transforms_ = utils::get_transform_matrix(*ego_kinematic_state);
 
   // Ego state
@@ -173,7 +202,7 @@ InputDataMap DiffusionPlanner::create_input_data()
   const auto center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
   std::tuple<Eigen::MatrixXf, RowLaneIDMaps> matrix_mapping_tuple =
     preprocess::transform_and_select_rows(
-      map_lane_segments_matrix_, map_to_ego_transform, row_id_mapping_, traffic_light_id_map_,
+      map_lane_segments_matrix_, map_to_ego_transform, row_id_mapping_, traffic_light_id_map,
       lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
   const Eigen::MatrixXf & ego_centric_lane_segments = std::get<0>(matrix_mapping_tuple);
   input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
@@ -286,7 +315,8 @@ void DiffusionPlanner::on_timer()
       output[0], this->now(), transforms_.first, batch_idx, ego_agent_idx);
     pub_trajectory_->publish(output_trajectory);
 
-    if (agent_data_.has_value()) {
+    // Other agents prediction
+    if (params_.predict_neighbor_trajectory && agent_data_.has_value()) {
       auto reduced_agent_data = agent_data_.value();
       reduced_agent_data.trim_to_k_closest_agents(ego_kinematic_state_.pose.pose.position);
       auto predicted_objects = postprocessing::create_predicted_objects(
