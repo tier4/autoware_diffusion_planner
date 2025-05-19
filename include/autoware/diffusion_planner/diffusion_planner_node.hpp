@@ -106,14 +106,16 @@ public:
   void on_timer();
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
   void load_model(const std::string & model_path);
+  void publish_debug_markers(InputDataMap & input_data_map);
+  void publish_predictions(Ort::Value & predictions);
+  std::optional<std::vector<Ort::Value>> do_inference(InputDataMap & input_data_map);
   SetParametersResult on_parameter(const std::vector<rclcpp::Parameter> & parameters);
+  InputDataMap create_input_data();
 
   // preprocessing
   std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
-
-  InputDataMap create_input_data();
 
   // postprocessing
   Trajectory create_trajectory(
