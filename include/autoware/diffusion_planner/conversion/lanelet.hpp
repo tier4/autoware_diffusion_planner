@@ -256,7 +256,6 @@ public:
     const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices,
     float center_x, float center_y, float mask_range) const;
 
-private:
   /**
    * @brief Convert a linestring to the set of polylines.
    *
@@ -292,6 +291,8 @@ private:
   size_t max_num_point_;                         //!< The max number of points.
   float point_break_distance_;                   //!< Distance threshold to separate two polylines.
 };
+std::vector<LanePoint> interpolate_lane(
+  const std::vector<LanePoint> & waypoints, float step = 0.5f);
 
 }  // namespace autoware::diffusion_planner
 

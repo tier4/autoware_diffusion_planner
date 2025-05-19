@@ -103,7 +103,7 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
 }
 
 // Interpolate lane waypoints with fixed arc length spacing (0.5m)
-std::vector<LanePoint> interpolate_lane(const std::vector<LanePoint> & waypoints, float step = 0.5f)
+std::vector<LanePoint> interpolate_lane(const std::vector<LanePoint> & waypoints, float step)
 {
   if (waypoints.size() < 2) return waypoints;
 

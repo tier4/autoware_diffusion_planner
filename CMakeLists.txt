@@ -42,7 +42,8 @@ rclcpp_components_register_node(autoware_diffusion_planner_component
 
 if(BUILD_TESTING)
   ament_add_ros_isolated_gtest(test_diffusion_planner
-  tests/agent_test.cpp)
+  tests/agent_test.cpp
+  tests/lanelet_test.cpp)
 
 target_link_libraries(test_diffusion_planner autoware_diffusion_planner_component)
 
