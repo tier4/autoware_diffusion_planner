@@ -274,6 +274,9 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
   if (
     centerlines.size() != POINTS_PER_SEGMENT || left_boundaries.size() != POINTS_PER_SEGMENT ||
     right_boundaries.size() != POINTS_PER_SEGMENT) {
+    throw std::runtime_error(
+      "Segment data size mismatch: centerlines, left boundaries, and right boundaries must have "
+      "POINTS_PER_SEGMENT points");
     return {};
   }
 
