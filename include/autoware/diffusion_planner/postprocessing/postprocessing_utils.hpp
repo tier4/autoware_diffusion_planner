@@ -21,6 +21,7 @@
 
 #include <Eigen/Dense>
 
+#include <autoware_new_planning_msgs/msg/trajectories.hpp>
 #include <autoware_perception_msgs/msg/detail/object_classification__struct.hpp>
 #include <autoware_perception_msgs/msg/detail/predicted_object__struct.hpp>
 #include <autoware_perception_msgs/msg/predicted_object.hpp>
@@ -29,14 +30,17 @@
 #include <autoware_planning_msgs/msg/trajectory.hpp>
 
 #include <cassert>
+#include <string>
 #include <vector>
 
 namespace autoware::diffusion_planner::postprocessing
 {
+using autoware_new_planning_msgs::msg::Trajectories;
 using autoware_perception_msgs::msg::ObjectClassification;
 using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_perception_msgs::msg::PredictedPath;
 using autoware_planning_msgs::msg::Trajectory;
+using unique_identifier_msgs::msg::UUID;
 
 void transform_output_matrix(
   const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
@@ -63,6 +67,9 @@ Trajectory create_trajectory(
 std::vector<Trajectory> create_multiple_trajectories(
   Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
   long start_batch, long start_agent);
+
+Trajectories to_trajectories_msg(
+  const Trajectory & trajectory, const UUID & generator_uuid, const std::string & generator_name);
 
 }  // namespace autoware::diffusion_planner::postprocessing
 #endif  // AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP
