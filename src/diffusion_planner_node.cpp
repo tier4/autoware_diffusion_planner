@@ -40,15 +40,18 @@
 namespace autoware::diffusion_planner
 {
 DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
-: Node("diffusion_planner", options), session_(nullptr)  // Initialize session_ with a default value
+: Node("diffusion_planner", options),
+  session_(nullptr),
+  generator_uuid_(autoware_utils_uuid::generate_uuid())
 {
   // Initialize the node
-  rclcpp::Node::SharedPtr node = std::make_shared<rclcpp::Node>("diffusion_planner", options);
-  pub_trajectory_ = node->create_publisher<Trajectory>("~/output/trajectory", 1);
-  pub_objects_ = create_publisher<PredictedObjects>("~/output/predicted_objects", rclcpp::QoS(1));
-  pub_route_marker_ = node->create_publisher<MarkerArray>("~/debug/route_marker", 10);
-  pub_lane_marker_ = node->create_publisher<MarkerArray>("~/debug/lane_marker", 10);
-  debug_processing_time_detail_pub_ = node->create_publisher<autoware_utils::ProcessingTimeDetail>(
+  pub_trajectory_ = this->create_publisher<Trajectory>("~/output/trajectory", 1);
+  pub_trajectories_ = this->create_publisher<Trajectories>("~/output/trajectories", 1);
+  pub_objects_ =
+    this->create_publisher<PredictedObjects>("~/output/predicted_objects", rclcpp::QoS(1));
+  pub_route_marker_ = this->create_publisher<MarkerArray>("~/debug/route_marker", 10);
+  pub_lane_marker_ = this->create_publisher<MarkerArray>("~/debug/lane_marker", 10);
+  debug_processing_time_detail_pub_ = this->create_publisher<autoware_utils::ProcessingTimeDetail>(
     "~/debug/processing_time_detail_ms", 1);
   time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 
@@ -243,6 +246,10 @@ void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
   auto output_trajectory = postprocessing::create_trajectory(
     predictions, this->now(), transforms_.first, batch_idx, ego_agent_idx);
   pub_trajectory_->publish(output_trajectory);
+
+  auto ego_trajectory_as_new_msg =
+    postprocessing::to_trajectories_msg(output_trajectory, generator_uuid_, "DiffusionPlanner");
+  pub_trajectories_->publish(ego_trajectory_as_new_msg);
 
   // Other agents prediction
   if (params_.predict_neighbor_trajectory && agent_data_.has_value()) {
