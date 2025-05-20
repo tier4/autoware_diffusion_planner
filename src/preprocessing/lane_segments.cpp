@@ -46,8 +46,8 @@ void compute_distances(
   distances.reserve(rows / POINTS_PER_SEGMENT);
   for (long i = 0; i < rows; i += POINTS_PER_SEGMENT) {
     // Directly access input matrix as raw memory
-    float x = input_matrix.block(i, 0, POINTS_PER_SEGMENT, 1).mean();
-    float y = input_matrix.block(i, 1, POINTS_PER_SEGMENT, 1).mean();
+    float x = input_matrix.block(i, X, POINTS_PER_SEGMENT, 1).mean();
+    float y = input_matrix.block(i, Y, POINTS_PER_SEGMENT, 1).mean();
     bool inside =
       (x > center_x - mask_range * 1.1 && x < center_x + mask_range * 1.1 &&
        y > center_y - mask_range * 1.1 && y < center_y + mask_range * 1.1);
@@ -271,12 +271,13 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
   const auto & left_boundaries = segment.left_boundaries.front().waypoints();
   const auto & right_boundaries = segment.right_boundaries.front().waypoints();
 
-  const size_t n_rows = centerlines.size();
-  if (left_boundaries.size() != n_rows || right_boundaries.size() != n_rows) {
+  if (
+    centerlines.size() != POINTS_PER_SEGMENT || left_boundaries.size() != POINTS_PER_SEGMENT ||
+    right_boundaries.size() != POINTS_PER_SEGMENT) {
     return {};
   }
 
-  Eigen::MatrixXf segment_data(n_rows, FULL_MATRIX_COLS);
+  Eigen::MatrixXf segment_data(POINTS_PER_SEGMENT, FULL_MATRIX_COLS);
 
   // Encode traffic light as one-hot
   Eigen::Vector4f traffic_light_vec = Eigen::Vector4f::Zero();
@@ -296,19 +297,19 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
   }
 
   // Build each row
-  for (long i = 0; i < static_cast<long>(n_rows); ++i) {
+  for (long i = 0; i < POINTS_PER_SEGMENT; ++i) {
     segment_data(i, X) = centerlines[i].x();
     segment_data(i, Y) = centerlines[i].y();
     segment_data(i, dX) =
-      i < static_cast<long>(n_rows) - 1 ? centerlines[i + 1].x() - centerlines[i].x() : 0.0f;
+      i < POINTS_PER_SEGMENT - 1 ? centerlines[i + 1].x() - centerlines[i].x() : 0.0f;
     segment_data(i, dY) =
-      i < static_cast<long>(n_rows) - 1 ? centerlines[i + 1].y() - centerlines[i].y() : 0.0f;
+      i < POINTS_PER_SEGMENT - 1 ? centerlines[i + 1].y() - centerlines[i].y() : 0.0f;
     segment_data(i, LB_X) = left_boundaries[i].x();
     segment_data(i, LB_Y) = left_boundaries[i].y();
     segment_data(i, RB_X) = right_boundaries[i].x();
     segment_data(i, RB_Y) = right_boundaries[i].y();
     segment_data.block<1, 4>(i, TRAFFIC_LIGHT) = traffic_light_vec.transpose();
-    segment_data(i, SPEED_LIMIT) = segment.speed_limit_mph.value_or(0.0f);
+    segment_data(i, SPEED_LIMIT) = segment.speed_limit_mps.value_or(0.0f);
     segment_data(i, LANE_ID) = static_cast<float>(segment.id);
   }
 

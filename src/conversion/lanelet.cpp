@@ -102,49 +102,6 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
   return result;
 }
 
-// Interpolate lane waypoints with fixed arc length spacing (0.5m)
-std::vector<LanePoint> interpolate_lane(const std::vector<LanePoint> & waypoints, float step)
-{
-  if (waypoints.size() < 2) return waypoints;
-
-  // Compute cumulative arc lengths
-  std::vector<float> distances(waypoints.size(), 0.0f);
-  for (size_t i = 1; i < waypoints.size(); ++i) {
-    distances[i] = distances[i - 1] + euclidean_distance(waypoints[i], waypoints[i - 1]);
-  }
-
-  float total_length = distances.back();
-  std::vector<float> new_distances;
-  for (float d = 0.0f; d < total_length; d += step) {
-    new_distances.push_back(d);
-  }
-  if (std::abs(new_distances.back() - total_length) > 1e-3f) {
-    new_distances.push_back(total_length);
-  }
-
-  // Interpolate new waypoints
-  std::vector<LanePoint> new_waypoints;
-  size_t j = 0;
-  for (float d : new_distances) {
-    while (j < distances.size() - 2 && distances[j + 1] < d) {
-      ++j;
-    }
-    float den = (distances[j + 1] - distances[j]);
-    float t = std::abs(den) > 1e-2 ? (d - distances[j]) / den : 0.f;
-    new_waypoints.push_back(linear_interpolate(waypoints[j], waypoints[j + 1], t));
-  }
-
-  // Ensure first and last points match exactly (no duplication)
-  if (euclidean_distance(new_waypoints.front(), waypoints.front()) > 1e-3f) {
-    new_waypoints.insert(new_waypoints.begin(), waypoints.front());
-  }
-  if (euclidean_distance(new_waypoints.back(), waypoints.back()) > 1e-3f) {
-    new_waypoints.push_back(waypoints.back());
-  }
-
-  return new_waypoints;
-}
-
 std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments(
   const long num_lane_points) const
 {
