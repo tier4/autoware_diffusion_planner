@@ -181,20 +181,20 @@ struct LaneSegment
   bool is_intersection{false};
   std::vector<BoundarySegment> left_boundaries;
   std::vector<BoundarySegment> right_boundaries;
-  std::optional<float> speed_limit_mph{std::nullopt};
+  std::optional<float> speed_limit_mps{std::nullopt};
   uint8_t traffic_light;
 
   LaneSegment(
     int64_t id, Polyline polyline, bool is_intersection,
     const std::vector<BoundarySegment> & left_boundaries,
-    const std::vector<BoundarySegment> & right_boundaries, std::optional<float> speed_limit_mph,
+    const std::vector<BoundarySegment> & right_boundaries, std::optional<float> speed_limit_mps,
     const uint8_t traffic_light)
   : id(id),
     polyline(std::move(polyline)),
     is_intersection(is_intersection),
     left_boundaries(left_boundaries),
     right_boundaries(right_boundaries),
-    speed_limit_mph(speed_limit_mph),
+    speed_limit_mps(speed_limit_mps),
     traffic_light(traffic_light)
   {
   }
@@ -256,7 +256,6 @@ public:
     const std::vector<LaneSegment> & lane_segments, std::map<int64_t, long> & segment_row_indices,
     float center_x, float center_y, float mask_range) const;
 
-private:
   /**
    * @brief Convert a linestring to the set of polylines.
    *
@@ -293,6 +292,7 @@ private:
   float point_break_distance_;                   //!< Distance threshold to separate two polylines.
 };
 
+std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, size_t num_points);
 }  // namespace autoware::diffusion_planner
 
 #endif  // AUTOWARE__DIFFUSION_PLANNER__CONVERSION__LANELET_HPP_
