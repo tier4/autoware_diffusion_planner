@@ -58,7 +58,8 @@ PredictedObjects create_predicted_objects(
   const Eigen::Matrix4f & transform_ego_to_map);
 
 Trajectory get_trajectory_from_prediction_matrix(
-  const Eigen::MatrixXf & prediction_matrix, const rclcpp::Time & stamp);
+  const Eigen::MatrixXf & prediction_matrix, const Eigen::Matrix4f & transform_ego_to_map,
+  const rclcpp::Time & stamp);
 
 Trajectory create_trajectory(
   Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
