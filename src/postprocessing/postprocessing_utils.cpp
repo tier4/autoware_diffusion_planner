@@ -27,6 +27,8 @@
 #include <autoware_new_planning_msgs/msg/trajectory_generator_info.hpp>
 #include <autoware_perception_msgs/msg/detail/predicted_objects__struct.hpp>
 
+#include <Eigen/src/Core/Matrix.h>
+
 #include <cstddef>
 
 namespace autoware::diffusion_planner::postprocessing
@@ -159,15 +161,17 @@ Eigen::MatrixXf get_prediction_matrix(
 }
 
 Trajectory get_trajectory_from_prediction_matrix(
-  const Eigen::MatrixXf & prediction_matrix, const rclcpp::Time & stamp)
+  const Eigen::MatrixXf & prediction_matrix, const Eigen::Matrix4f & transform_ego_to_map,
+  const rclcpp::Time & stamp)
 {
   Trajectory trajectory;
   trajectory.header.stamp = stamp;
   trajectory.header.frame_id = "map";
   // TODO(Daniel): check there is no issue with the speed of 1st point (index 0)
   constexpr double dt = 0.1f;
-  double prev_x = 0.;
-  double prev_y = 0.;
+  Eigen::Vector4f ego_position = transform_ego_to_map * Eigen::Vector4f(0.0, 0.0, 0.0, 1.0);
+  double prev_x = ego_position(0);
+  double prev_y = ego_position(1);
   for (long row = 0; row < prediction_matrix.rows(); ++row) {
     TrajectoryPoint p;
     p.pose.position.x = prediction_matrix(row, 0);
@@ -193,7 +197,7 @@ Trajectory create_trajectory(
   // one batch of prediction
   Eigen::MatrixXf prediction_matrix =
     get_prediction_matrix(prediction, transform_ego_to_map, batch, agent);
-  return get_trajectory_from_prediction_matrix(prediction_matrix, stamp);
+  return get_trajectory_from_prediction_matrix(prediction_matrix, transform_ego_to_map, stamp);
 }
 
 std::vector<Trajectory> create_multiple_trajectories(
@@ -220,7 +224,8 @@ std::vector<Trajectory> create_multiple_trajectories(
       postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
       postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
       prediction_matrix.transposeInPlace();
-      agent_trajectories.push_back(get_trajectory_from_prediction_matrix(prediction_matrix, stamp));
+      agent_trajectories.push_back(
+        get_trajectory_from_prediction_matrix(prediction_matrix, transform_ego_to_map, stamp));
     }
   }
   return agent_trajectories;
