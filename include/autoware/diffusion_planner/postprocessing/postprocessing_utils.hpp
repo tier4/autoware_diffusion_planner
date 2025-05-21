@@ -28,8 +28,10 @@
 #include <autoware_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_planning_msgs/msg/detail/trajectory__struct.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 
 #include <cassert>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -40,6 +42,7 @@ using autoware_perception_msgs::msg::ObjectClassification;
 using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_perception_msgs::msg::PredictedPath;
 using autoware_planning_msgs::msg::Trajectory;
+using nav_msgs::msg::Odometry;
 using unique_identifier_msgs::msg::UUID;
 
 /**
@@ -140,6 +143,8 @@ std::vector<Trajectory> create_multiple_trajectories(
  */
 Trajectories to_trajectories_msg(
   const Trajectory & trajectory, const UUID & generator_uuid, const std::string & generator_name);
+
+void add_current_ego_state(const Odometry & current_odom, Trajectory & trajectory);
 
 }  // namespace autoware::diffusion_planner::postprocessing
 #endif  // AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP

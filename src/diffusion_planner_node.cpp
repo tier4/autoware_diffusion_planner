@@ -277,6 +277,7 @@ void DiffusionPlanner::load_engine(const std::string & model_path)
 AgentData DiffusionPlanner::get_ego_centric_agent_data(
   const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform)
 {
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   if (!agent_data_) {
     agent_data_ = AgentData(objects, NEIGHBOR_SHAPE[1], NEIGHBOR_SHAPE[2]);
   } else {
@@ -381,6 +382,7 @@ InputDataMap DiffusionPlanner::create_input_data()
 
 void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map) const
 {
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   if (debug_params_.publish_debug_route) {
     auto lifetime = rclcpp::Duration::from_seconds(0.1);
     auto route_markers = utils::create_lane_marker(
@@ -401,10 +403,12 @@ void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map) cons
 
 void DiffusionPlanner::publish_predictions(const std::vector<float> & predictions) const
 {
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   constexpr long batch_idx = 0;
   constexpr long ego_agent_idx = 0;
   auto output_trajectory = postprocessing::create_trajectory(
-    predictions, this->now(), transforms_.first, batch_idx, ego_agent_idx);
+    predictions, this->now(), transforms_.first, prev_prediction_matrix_, batch_idx, ego_agent_idx);
+  postprocessing::add_current_ego_state(ego_kinematic_state_, output_trajectory);
   pub_trajectory_->publish(output_trajectory);
 
   auto ego_trajectory_as_new_msg =

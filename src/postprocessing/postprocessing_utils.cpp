@@ -195,9 +195,17 @@ Trajectory create_trajectory(
   const std::vector<float> & prediction, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent)
 {
+  constexpr float alpha = 0.2f;
   // one batch of prediction
   Eigen::MatrixXf prediction_matrix =
     get_prediction_matrix(prediction, transform_ego_to_map, batch, agent);
+
+  if (prev_prediction_matrix.has_value()) {
+    // TODO(Daniel): check if this is correct
+    prediction_matrix = (1 - alpha) * prev_prediction_matrix.value() + alpha * prediction_matrix;
+  }
+  prev_prediction_matrix = prediction_matrix;
+
   return get_trajectory_from_prediction_matrix(prediction_matrix, transform_ego_to_map, stamp);
 }
 
@@ -255,6 +263,26 @@ Trajectories to_trajectories_msg(
       .trajectories({new_trajectory})
       .generator_info({generator_info});
   return output;
+}
+
+void add_current_ego_state(const Odometry & current_odom, Trajectory & trajectory)
+{
+  constexpr double ego_state_distance_threshold_m = 0.1;  // meters
+  const auto & current_pose = current_odom.pose.pose;
+  auto distance = std::hypot(
+    current_pose.position.x - trajectory.points.front().pose.position.x,
+    current_pose.position.y - trajectory.points.front().pose.position.y);
+
+  if (distance < ego_state_distance_threshold_m) {
+    return;
+  }
+
+  TrajectoryPoint ego_state;
+  ego_state.pose = current_pose;
+  ego_state.longitudinal_velocity_mps = current_odom.twist.twist.linear.x;
+  ego_state.lateral_velocity_mps = current_odom.twist.twist.linear.y;
+
+  trajectory.points.insert(trajectory.points.begin(), ego_state);
 }
 
 }  // namespace autoware::diffusion_planner::postprocessing
