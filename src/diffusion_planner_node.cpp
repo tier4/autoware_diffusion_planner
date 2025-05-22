@@ -221,7 +221,8 @@ InputDataMap DiffusionPlanner::create_input_data()
   constexpr double backward_path_length{5.0};
   constexpr double forward_path_length{200.0};
 
-  if (!route_handler_->getClosestPreferredLaneletWithinRoute(current_pose, &current_lane)) {
+  if (!route_handler_->getClosestPreferredLaneletWithinRoute(
+        current_pose, &current_preferred_lane)) {
     auto clock{rclcpp::Clock{RCL_ROS_TIME}};
     RCLCPP_ERROR_STREAM_THROTTLE(
       rclcpp::get_logger("behavior_path_planner").get_child("utils"), clock, 1000,
