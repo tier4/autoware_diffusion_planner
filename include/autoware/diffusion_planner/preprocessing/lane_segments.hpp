@@ -72,9 +72,10 @@ struct ColLaneIDMaps
  */
 std::vector<float> get_route_segments(
   const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & transform_matrix,
-  LaneletRoute::ConstSharedPtr route_ptr_, const ColLaneIDMaps & col_id_mapping,
+  const ColLaneIDMaps & col_id_mapping,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
-  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr);
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr,
+  lanelet::ConstLanelets & current_lanes);
 
 /**
  * @brief Extracts lane tensor data from ego-centric lane segments.

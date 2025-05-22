@@ -23,6 +23,7 @@
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 
 #include <Eigen/Dense>
+#include <autoware/route_handler/route_handler.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_utils/ros/polling_subscriber.hpp>
 #include <autoware_utils/ros/update_param.hpp>
@@ -75,6 +76,7 @@ using geometry_msgs::msg::AccelWithCovarianceStamped;
 using nav_msgs::msg::Odometry;
 using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
 using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
+using autoware::route_handler::RouteHandler;
 using builtin_interfaces::msg::Duration;
 using builtin_interfaces::msg::Time;
 using geometry_msgs::msg::Point;
@@ -117,6 +119,7 @@ public:
   InputDataMap create_input_data();
 
   // preprocessing
+  std::shared_ptr<RouteHandler> route_handler_{std::make_shared<RouteHandler>()};
   std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
