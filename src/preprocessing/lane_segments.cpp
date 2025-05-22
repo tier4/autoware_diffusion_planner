@@ -67,19 +67,20 @@ void compute_distances(
 }
 
 void transform_selected_cols(
-  const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
+  const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long num_segments,
   long row_idx, bool do_translation)
 {
-  Eigen::Matrix<float, 4, POINTS_PER_SEGMENT> xy_block =
-    Eigen::Matrix<float, 4, POINTS_PER_SEGMENT>::Zero();
-  xy_block.block<2, POINTS_PER_SEGMENT>(0, 0) =
-    output_matrix.block<2, POINTS_PER_SEGMENT>(row_idx, column_idx * POINTS_PER_SEGMENT);
-  xy_block.row(3) = do_translation ? Eigen::Matrix<float, 1, POINTS_PER_SEGMENT>::Ones()
-                                   : Eigen::Matrix<float, 1, POINTS_PER_SEGMENT>::Zero();
+  Eigen::MatrixXf xy_block(4, num_segments * POINTS_PER_SEGMENT);
+  xy_block.setZero();
+  xy_block.block(0, 0, 2, num_segments * POINTS_PER_SEGMENT) =
+    output_matrix.block(row_idx, 0, 2, num_segments * POINTS_PER_SEGMENT);
 
-  Eigen::Matrix<float, 4, POINTS_PER_SEGMENT> transformed_block = transform_matrix * xy_block;
-  output_matrix.block<2, POINTS_PER_SEGMENT>(row_idx, column_idx * POINTS_PER_SEGMENT) =
-    transformed_block.block<2, POINTS_PER_SEGMENT>(0, 0);
+  xy_block.row(3) = do_translation ? Eigen::MatrixXf::Ones(1, num_segments * POINTS_PER_SEGMENT)
+                                   : Eigen::MatrixXf::Zero(1, num_segments * POINTS_PER_SEGMENT);
+
+  Eigen::MatrixXf transformed_block = transform_matrix * xy_block;
+  output_matrix.block(row_idx, 0, 2, num_segments * POINTS_PER_SEGMENT) =
+    transformed_block.block(0, 0, 2, num_segments * POINTS_PER_SEGMENT);
 }
 
 void add_traffic_light_one_hot_encoding_to_segment(
@@ -178,13 +179,6 @@ std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_points_and_add_traffic_info
     add_traffic_light_one_hot_encoding_to_segment(
       output_matrix, row_id_mapping, traffic_light_id_map, lanelet_map_ptr, row_idx, col_counter);
 
-    // transform the x and y coordinates
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, X);
-    // the dx and dy coordinates do not require translation
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, dX, false);
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, LB_X);
-    transform_selected_cols(transform_matrix, output_matrix, col_counter, RB_X);
-
     new_row_id_mapping.lane_id_to_matrix_row.emplace(
       lane_id->second, col_counter * POINTS_PER_SEGMENT);
     new_row_id_mapping.matrix_row_to_lane_id.emplace(
@@ -195,6 +189,13 @@ std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_points_and_add_traffic_info
       break;
     }
   }
+  // transform the x and y coordinates
+  transform_selected_cols(transform_matrix, output_matrix, added_segments, X);
+  // the dx and dy coordinates do not require translation
+  transform_selected_cols(transform_matrix, output_matrix, added_segments, dX, false);
+  transform_selected_cols(transform_matrix, output_matrix, added_segments, LB_X);
+  transform_selected_cols(transform_matrix, output_matrix, added_segments, RB_X);
+
   // subtract center from boundaries
   output_matrix.row(LB_X) = output_matrix.row(LB_X) - output_matrix.row(X);
   output_matrix.row(LB_Y) = output_matrix.row(LB_Y) - output_matrix.row(Y);
