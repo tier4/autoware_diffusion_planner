@@ -220,7 +220,7 @@ std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_and_select_rows(
   }
   std::vector<RowWithDistance> distances;
   // Step 1: Compute distances
-  compute_distances(input_matrix, transform_matrix, distances, center_x, center_y, 10000);
+  compute_distances(input_matrix, transform_matrix, distances, center_x, center_y, 100.0f);
   // Step 2: Sort indices by distance
   sort_indices_by_distance(distances);
   // Step 3: Apply transformation to selected rows
