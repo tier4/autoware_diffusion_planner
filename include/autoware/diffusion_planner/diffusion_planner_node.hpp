@@ -78,7 +78,7 @@ using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
 using builtin_interfaces::msg::Duration;
 using builtin_interfaces::msg::Time;
 using geometry_msgs::msg::Point;
-using preprocess::RowLaneIDMaps;
+using preprocess::ColLaneIDMaps;
 using preprocess::TrafficSignalStamped;
 using rcl_interfaces::msg::SetParametersResult;
 using std_msgs::msg::ColorRGBA;
@@ -152,7 +152,7 @@ public:
   std::unique_ptr<LaneletConverter> lanelet_converter_ptr_;
   std::vector<LaneSegment> lane_segments_;
   Eigen::MatrixXf map_lane_segments_matrix_;
-  RowLaneIDMaps row_id_mapping_;
+  ColLaneIDMaps col_id_mapping_;
   bool is_map_loaded_{false};
 
   // Node elements

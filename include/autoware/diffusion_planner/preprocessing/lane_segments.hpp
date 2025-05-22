@@ -53,7 +53,7 @@ struct RowWithDistance
   bool inside;             //!< Whether the row is within the mask range.
 };
 
-struct RowLaneIDMaps
+struct ColLaneIDMaps
 {
   std::map<lanelet::Id, long> lane_id_to_matrix_row;
   std::map<long, lanelet::Id> matrix_row_to_lane_id;
@@ -64,15 +64,17 @@ struct RowLaneIDMaps
  * ego-centric coordinates.
  * @param map_lane_segments_matrix Matrix containing lane segment data in map coordinates.
  * @param route_ptr_ Shared pointer to the route containing the segments to extract.
- * @param row_id_mapping Map of segment IDs to their corresponding row indices in the lane
+ * @param col_id_mapping Map of segment IDs to their corresponding row indices in the lane
  * segments matrix.
  * @param center_x X-coordinate of the ego vehicle's center.
  * @param center_y Y-coordinate of the ego vehicle's center.
  * @return A flattened vector containing the transformed route segments in ego-centric coordinates.
  */
 std::vector<float> get_route_segments(
-  const Eigen::MatrixXf & map_lane_segments_matrix, LaneletRoute::ConstSharedPtr route_ptr_,
-  const RowLaneIDMaps & row_id_mapping);
+  const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & transform_matrix,
+  LaneletRoute::ConstSharedPtr route_ptr_, const ColLaneIDMaps & col_id_mapping,
+  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr);
 
 /**
  * @brief Extracts lane tensor data from ego-centric lane segments.
@@ -100,7 +102,7 @@ std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_s
  * @throws std::runtime_error If any segment matrix does not have the expected number of rows.
  */
 Eigen::MatrixXf process_segments_to_matrix(
-  const std::vector<LaneSegment> & lane_segments, RowLaneIDMaps & row_id_mapping);
+  const std::vector<LaneSegment> & lane_segments, ColLaneIDMaps & col_id_mapping);
 
 /**
  * @brief Processes a single lane segment and converts it into a matrix representation.
@@ -139,13 +141,16 @@ inline void sort_indices_by_distance(std::vector<RowWithDistance> & distances)
 }
 
 void add_traffic_light_one_hot_encoding_to_segment(
-  [[maybe_unused]] Eigen::MatrixXf & segment_matrix, const RowLaneIDMaps & row_id_mapping,
+  [[maybe_unused]] Eigen::MatrixXf & segment_matrix, const ColLaneIDMaps & col_id_mapping,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const long row_idx,
   [[maybe_unused]] const long col_counter);
 
 Eigen::RowVector4f get_traffic_signal_row_vector(
   const autoware_perception_msgs::msg::TrafficLightGroup & signal);
+
+void apply_transforms(
+  const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long num_segments);
 
 /**
  * @brief Transforms selected columns of the output matrix using a transformation matrix.
@@ -156,7 +161,7 @@ Eigen::RowVector4f get_traffic_signal_row_vector(
  * @param row_idx Index of the row to transform.
  * @param do_translation Whether to apply translation during the transformation.
  */
-void transform_selected_cols(
+void transform_selected_rows(
   const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
   long row_idx, bool do_translation = true);
 
@@ -169,7 +174,7 @@ void transform_selected_cols(
  * @param m Maximum number of rows to select.
  * @return Transformed matrix containing the selected rows.
  */
-std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_points_and_add_traffic_info(
+std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info(
   const Eigen::MatrixXf & input_matrix, [[maybe_unused]] const Eigen::Matrix4f & transform_matrix,
   [[maybe_unused]] const std::vector<RowWithDistance> & distances,
   [[maybe_unused]] const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m);
@@ -185,9 +190,9 @@ std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_points_and_add_traffic_info
  * @return Transformed matrix containing the selected rows.
  * @throws std::invalid_argument If input_matrix dimensions are not correct or if m <= 0.
  */
-std::tuple<Eigen::MatrixXf, RowLaneIDMaps> transform_and_select_rows(
+std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_and_select_rows(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  const RowLaneIDMaps & row_id_mapping,
+  const ColLaneIDMaps & col_id_mapping,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y,
   const long m);

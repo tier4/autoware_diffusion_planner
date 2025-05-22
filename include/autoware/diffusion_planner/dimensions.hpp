@@ -24,7 +24,7 @@ constexpr long SEGMENT_POINT_DIM = 12;   // Dimension of a lane segment point
 constexpr long POINTS_PER_SEGMENT = 20;  //!< Number of points in each lane segment.
 // Number of columns in a segment matrix
 // (X,Y,dX,dY,LeftBoundX,LeftBoundY,RightBoundX,RightBoundX,TrafficLightEncoding(Dim4),Speed Limit)
-constexpr long FULL_MATRIX_COLS = 14;
+constexpr long FULL_MATRIX_ROWS = 14;
 constexpr long TRAFFIC_LIGHT_ONE_HOT_DIM = 4;
 
 // Index for each field

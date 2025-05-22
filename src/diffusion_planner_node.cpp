@@ -204,9 +204,9 @@ InputDataMap DiffusionPlanner::create_input_data()
   // map data on ego reference frame
   const auto center_x = static_cast<float>(ego_kinematic_state->pose.pose.position.x);
   const auto center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
-  std::tuple<Eigen::MatrixXf, RowLaneIDMaps> matrix_mapping_tuple =
+  std::tuple<Eigen::MatrixXf, ColLaneIDMaps> matrix_mapping_tuple =
     preprocess::transform_and_select_rows(
-      map_lane_segments_matrix_, map_to_ego_transform, row_id_mapping_, traffic_light_id_map,
+      map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
       lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
   const Eigen::MatrixXf & ego_centric_lane_segments = std::get<0>(matrix_mapping_tuple);
   input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
@@ -214,9 +214,9 @@ InputDataMap DiffusionPlanner::create_input_data()
     preprocess::extract_lane_speed_tensor_data(ego_centric_lane_segments);
 
   // route data on ego reference frame
-  const RowLaneIDMaps & updated_row_id_map = std::get<1>(matrix_mapping_tuple);
-  input_data_map["route_lanes"] =
-    preprocess::get_route_segments(ego_centric_lane_segments, route_ptr_, updated_row_id_map);
+  input_data_map["route_lanes"] = preprocess::get_route_segments(
+    map_lane_segments_matrix_, map_to_ego_transform, route_ptr_, col_id_mapping_,
+    traffic_light_id_map, lanelet_map_ptr_);
   return input_data_map;
 }
 
@@ -372,8 +372,7 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
   }
 
   map_lane_segments_matrix_ =
-    preprocess::process_segments_to_matrix(lane_segments_, row_id_mapping_);
-
+    preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping_);
   is_map_loaded_ = true;
 }
 

@@ -24,7 +24,7 @@ TEST_F(LaneSegmentsTest, ProcessSegmentToMatrix)
   auto segment_matrix = preprocess::process_segment_to_matrix(lane_segments_.front());
 
   ASSERT_EQ(segment_matrix.rows(), POINTS_PER_SEGMENT);  // Expect 3 rows (one for each point)
-  ASSERT_EQ(segment_matrix.cols(), FULL_MATRIX_COLS);    // Expect FULL_MATRIX_COLS columns
+  ASSERT_EQ(segment_matrix.cols(), FULL_MATRIX_ROWS);    // Expect FULL_MATRIX_ROWS columns
 
   EXPECT_FLOAT_EQ(segment_matrix(0, X), 0.0);
   EXPECT_FLOAT_EQ(segment_matrix(POINTS_PER_SEGMENT - 1, X), 20.0);
@@ -40,21 +40,21 @@ TEST_F(LaneSegmentsTest, ProcessSegmentToMatrix)
 
 TEST_F(LaneSegmentsTest, ProcessSegmentsToMatrix)
 {
-  preprocess::RowLaneIDMaps row_id_mapping;
-  auto full_matrix = preprocess::process_segments_to_matrix(lane_segments_, row_id_mapping);
+  preprocess::ColLaneIDMaps col_id_mapping;
+  auto full_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
 
   ASSERT_EQ(
     full_matrix.rows(), POINTS_PER_SEGMENT);  // Expect 3 rows (one for each point in the segment)
-  ASSERT_EQ(full_matrix.cols(), FULL_MATRIX_COLS);  // Expect FULL_MATRIX_COLS columns
+  ASSERT_EQ(full_matrix.cols(), FULL_MATRIX_ROWS);  // Expect FULL_MATRIX_ROWS columns
 
-  EXPECT_EQ(row_id_mapping.lane_id_to_matrix_row.size(), 1);  // Expect one lane ID mapping
-  EXPECT_EQ(row_id_mapping.matrix_row_to_lane_id.size(), 1);  // Expect one row-to-lane mapping
+  EXPECT_EQ(col_id_mapping.lane_id_to_matrix_row.size(), 1);  // Expect one lane ID mapping
+  EXPECT_EQ(col_id_mapping.matrix_row_to_lane_id.size(), 1);  // Expect one row-to-lane mapping
 }
 
 TEST_F(LaneSegmentsTest, ComputeDistances)
 {
-  preprocess::RowLaneIDMaps row_id_mapping;
-  auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, row_id_mapping);
+  preprocess::ColLaneIDMaps col_id_mapping;
+  auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
 
   Eigen::Matrix4f transform_matrix = Eigen::Matrix4f::Identity();
   std::vector<preprocess::RowWithDistance> distances;
