@@ -23,6 +23,7 @@
 #include "autoware/diffusion_planner/utils/utils.hpp"
 #include "onnxruntime_cxx_api.h"
 
+#include <autoware_lanelet2_extension/utility/query.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logging.hpp>
 
@@ -174,6 +175,7 @@ InputDataMap DiffusionPlanner::create_input_data()
     return {};
   }
 
+  route_handler_->setRoute(*route_ptr_);
   std::map<lanelet::Id, TrafficSignalStamped> traffic_light_id_map;
   if (params_.update_traffic_light_group_info) {
     const auto & traffic_light_msg_timeout_s = params_.traffic_light_group_msg_timeout_seconds;
@@ -214,9 +216,26 @@ InputDataMap DiffusionPlanner::create_input_data()
     preprocess::extract_lane_speed_tensor_data(ego_centric_lane_segments);
 
   // route data on ego reference frame
+  const auto & current_pose = ego_kinematic_state->pose.pose;
+  lanelet::ConstLanelet current_preferred_lane;
+  constexpr double backward_path_length{5.0};
+  constexpr double forward_path_length{200.0};
+
+  if (!route_handler_->getClosestPreferredLaneletWithinRoute(current_pose, &current_lane)) {
+    auto clock{rclcpp::Clock{RCL_ROS_TIME}};
+    RCLCPP_ERROR_STREAM_THROTTLE(
+      rclcpp::get_logger("behavior_path_planner").get_child("utils"), clock, 1000,
+      "failed to find closest lanelet within route!!!");
+    return {};
+  }
+
+  // For current_lanes with desired length
+  auto current_lanes = route_handler_->getLaneletSequence(
+    current_preferred_lane, backward_path_length, forward_path_length);
+
   input_data_map["route_lanes"] = preprocess::get_route_segments(
-    map_lane_segments_matrix_, map_to_ego_transform, route_ptr_, col_id_mapping_,
-    traffic_light_id_map, lanelet_map_ptr_);
+    map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
+    lanelet_map_ptr_, current_lanes);
   return input_data_map;
 }
 
@@ -373,6 +392,8 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
 
   map_lane_segments_matrix_ =
     preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping_);
+
+  route_handler_->setMap(*map_msg);
   is_map_loaded_ = true;
 }
 

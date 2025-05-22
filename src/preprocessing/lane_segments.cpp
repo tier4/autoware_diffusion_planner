@@ -21,6 +21,7 @@
 #include <autoware_lanelet2_extension/utility/utilities.hpp>
 
 #include <Eigen/src/Core/Matrix.h>
+#include <lanelet2_core/Forward.h>
 
 #include <cmath>
 #include <iostream>
@@ -340,9 +341,10 @@ std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_s
 
 std::vector<float> get_route_segments(
   const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & transform_matrix,
-  LaneletRoute::ConstSharedPtr route_ptr_, const ColLaneIDMaps & col_id_mapping,
+  const ColLaneIDMaps & col_id_mapping,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
-  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr)
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr,
+  lanelet::ConstLanelets & current_lanes)
 {
   const auto total_route_points = ROUTE_LANES_SHAPE[1] * POINTS_PER_SEGMENT;
   Eigen::MatrixXf full_route_segment_matrix(SEGMENT_POINT_DIM, total_route_points);
@@ -350,12 +352,11 @@ std::vector<float> get_route_segments(
   long added_route_segments = 0;
 
   // Add traffic light one-hot encoding to the route segments
-  for (const auto & route_segment : route_ptr_->segments) {
+  for (const auto & route_segment : current_lanes) {
     if (added_route_segments >= ROUTE_LANES_SHAPE[1]) {
       break;
     }
-    auto route_segment_row_itr =
-      col_id_mapping.lane_id_to_matrix_col.find(route_segment.preferred_primitive.id);
+    auto route_segment_row_itr = col_id_mapping.lane_id_to_matrix_col.find(route_segment.id());
     if (route_segment_row_itr == col_id_mapping.lane_id_to_matrix_col.end()) {
       continue;
     }
