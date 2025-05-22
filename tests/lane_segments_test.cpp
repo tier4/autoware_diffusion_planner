@@ -47,8 +47,8 @@ TEST_F(LaneSegmentsTest, ProcessSegmentsToMatrix)
     full_matrix.rows(), POINTS_PER_SEGMENT);  // Expect 3 rows (one for each point in the segment)
   ASSERT_EQ(full_matrix.cols(), FULL_MATRIX_ROWS);  // Expect FULL_MATRIX_ROWS columns
 
-  EXPECT_EQ(col_id_mapping.lane_id_to_matrix_row.size(), 1);  // Expect one lane ID mapping
-  EXPECT_EQ(col_id_mapping.matrix_row_to_lane_id.size(), 1);  // Expect one row-to-lane mapping
+  EXPECT_EQ(col_id_mapping.lane_id_to_matrix_col.size(), 1);  // Expect one lane ID mapping
+  EXPECT_EQ(col_id_mapping.matrix_col_to_lane_id.size(), 1);  // Expect one row-to-lane mapping
 }
 
 TEST_F(LaneSegmentsTest, ComputeDistances)
@@ -57,7 +57,7 @@ TEST_F(LaneSegmentsTest, ComputeDistances)
   auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
 
   Eigen::Matrix4f transform_matrix = Eigen::Matrix4f::Identity();
-  std::vector<preprocess::RowWithDistance> distances;
+  std::vector<preprocess::ColWithDistance> distances;
 
   preprocess::compute_distances(input_matrix, transform_matrix, distances, 10.0, 0.0, 100.0);
 

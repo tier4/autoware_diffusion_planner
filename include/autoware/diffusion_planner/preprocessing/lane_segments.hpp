@@ -46,17 +46,17 @@ using autoware_planning_msgs::msg::LaneletRoute;
 /**
  * @brief Represents a row index with its associated distance and whether it is inside a mask range.
  */
-struct RowWithDistance
+struct ColWithDistance
 {
-  long index;              //!< Row index in the input matrix.
+  long index;              //!< col index in the input matrix.
   float distance_squared;  //!< Squared distance from the center.
-  bool inside;             //!< Whether the row is within the mask range.
+  bool inside;             //!< Whether the col is within the mask range.
 };
 
 struct ColLaneIDMaps
 {
-  std::map<lanelet::Id, long> lane_id_to_matrix_row;
-  std::map<long, lanelet::Id> matrix_row_to_lane_id;
+  std::map<lanelet::Id, long> lane_id_to_matrix_col;
+  std::map<long, lanelet::Id> matrix_col_to_lane_id;
 };
 
 /**
@@ -125,7 +125,7 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment);
  */
 void compute_distances(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  std::vector<RowWithDistance> & distances, float center_x, float center_y,
+  std::vector<ColWithDistance> & distances, float center_x, float center_y,
   float mask_range = 100.0);
 
 /**
@@ -133,7 +133,7 @@ void compute_distances(
  *
  * @param distances Vector of rows with distances to be sorted.
  */
-inline void sort_indices_by_distance(std::vector<RowWithDistance> & distances)
+inline void sort_indices_by_distance(std::vector<ColWithDistance> & distances)
 {
   std::sort(distances.begin(), distances.end(), [&](auto & a, auto & b) {
     return a.distance_squared < b.distance_squared;
@@ -176,7 +176,7 @@ void transform_selected_rows(
  */
 std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info(
   const Eigen::MatrixXf & input_matrix, [[maybe_unused]] const Eigen::Matrix4f & transform_matrix,
-  [[maybe_unused]] const std::vector<RowWithDistance> & distances,
+  [[maybe_unused]] const std::vector<ColWithDistance> & distances,
   [[maybe_unused]] const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m);
 
 /**

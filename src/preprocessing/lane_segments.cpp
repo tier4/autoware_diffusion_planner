@@ -29,7 +29,7 @@ namespace autoware::diffusion_planner::preprocess
 {
 void compute_distances(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  std::vector<RowWithDistance> & distances, float center_x, float center_y, float mask_range)
+  std::vector<ColWithDistance> & distances, float center_x, float center_y, float mask_range)
 {
   const auto cols = input_matrix.cols();
   if (cols % POINTS_PER_SEGMENT != 0) {
@@ -92,8 +92,8 @@ void add_traffic_light_one_hot_encoding_to_segment(
   if (traffic_light_id_map.empty()) {
     return;
   }
-  const auto lane_id_itr = col_id_mapping.matrix_row_to_lane_id.find(row_idx);
-  if (lane_id_itr == col_id_mapping.matrix_row_to_lane_id.end()) {
+  const auto lane_id_itr = col_id_mapping.matrix_col_to_lane_id.find(row_idx);
+  if (lane_id_itr == col_id_mapping.matrix_col_to_lane_id.end()) {
     throw std::invalid_argument("Invalid lane row to lane id mapping");
     return;
   }
@@ -143,7 +143,7 @@ Eigen::RowVector4f get_traffic_signal_row_vector(
 
 std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  const std::vector<RowWithDistance> & distances, const ColLaneIDMaps & col_id_mapping,
+  const std::vector<ColWithDistance> & distances, const ColLaneIDMaps & col_id_mapping,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m)
 {
@@ -164,9 +164,9 @@ std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info
       continue;
     }
     const auto col_idx_in_original_map = distance.index;
-    const auto lane_id = col_id_mapping.matrix_row_to_lane_id.find(col_idx_in_original_map);
+    const auto lane_id = col_id_mapping.matrix_col_to_lane_id.find(col_idx_in_original_map);
 
-    if (lane_id == col_id_mapping.matrix_row_to_lane_id.end()) {
+    if (lane_id == col_id_mapping.matrix_col_to_lane_id.end()) {
       throw std::invalid_argument("input_matrix size mismatch");
     }
 
@@ -218,7 +218,7 @@ std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_and_select_rows(
       "Input matrix must have at least FULL_MATRIX_ROWS columns and m must be greater than 0.");
     return {};
   }
-  std::vector<RowWithDistance> distances;
+  std::vector<ColWithDistance> distances;
   // Step 1: Compute distances
   compute_distances(input_matrix, transform_matrix, distances, center_x, center_y, 100.0f);
   // Step 2: Sort indices by distance
@@ -254,8 +254,8 @@ Eigen::MatrixXf process_segments_to_matrix(
   for (const auto & mat : all_segment_matrices) {
     stacked_matrix.middleRows(current_row, mat.rows()) = mat;
     const auto id = static_cast<int64_t>(mat(0, LANE_ID));
-    col_id_mapping.lane_id_to_matrix_row.emplace(id, current_row);
-    col_id_mapping.matrix_row_to_lane_id.emplace(current_row, id);
+    col_id_mapping.lane_id_to_matrix_col.emplace(id, current_row);
+    col_id_mapping.matrix_col_to_lane_id.emplace(current_row, id);
     current_row += POINTS_PER_SEGMENT;
   }
   return stacked_matrix.transpose();
@@ -355,8 +355,8 @@ std::vector<float> get_route_segments(
       break;
     }
     auto route_segment_row_itr =
-      col_id_mapping.lane_id_to_matrix_row.find(route_segment.preferred_primitive.id);
-    if (route_segment_row_itr == col_id_mapping.lane_id_to_matrix_row.end()) {
+      col_id_mapping.lane_id_to_matrix_col.find(route_segment.preferred_primitive.id);
+    if (route_segment_row_itr == col_id_mapping.lane_id_to_matrix_col.end()) {
       continue;
     }
 
