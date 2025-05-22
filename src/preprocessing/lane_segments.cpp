@@ -351,6 +351,9 @@ std::vector<float> get_route_segments(
 
   // Add traffic light one-hot encoding to the route segments
   for (const auto & route_segment : route_ptr_->segments) {
+    if (added_route_segments >= ROUTE_LANES_SHAPE[1]) {
+      break;
+    }
     auto route_segment_row_itr =
       col_id_mapping.lane_id_to_matrix_row.find(route_segment.preferred_primitive.id);
     if (route_segment_row_itr == col_id_mapping.lane_id_to_matrix_row.end()) {

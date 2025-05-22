@@ -162,7 +162,7 @@ void apply_transforms(
  * @param do_translation Whether to apply translation during the transformation.
  */
 void transform_selected_rows(
-  const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
+  const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long num_segments,
   long row_idx, bool do_translation = true);
 
 /**
