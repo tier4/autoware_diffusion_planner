@@ -225,7 +225,7 @@ InputDataMap DiffusionPlanner::create_input_data()
         current_pose, &current_preferred_lane)) {
     auto clock{rclcpp::Clock{RCL_ROS_TIME}};
     RCLCPP_ERROR_STREAM_THROTTLE(
-      rclcpp::get_logger("behavior_path_planner").get_child("utils"), clock, 1000,
+      rclcpp::get_logger("diffusion_planner").get_child("utils"), clock, 1000,
       "failed to find closest lanelet within route!!!");
     return {};
   }
