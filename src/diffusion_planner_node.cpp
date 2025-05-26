@@ -190,54 +190,60 @@ InputDataMap DiffusionPlanner::create_input_data()
 
   ego_kinematic_state_ = *ego_kinematic_state;
   transforms_ = utils::get_transform_matrix(*ego_kinematic_state);
+  const auto & map_to_ego_transform = transforms_.second;
+  const auto & center_x = static_cast<float>(ego_kinematic_state->pose.pose.position.x);
+  const auto & center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
 
   // Ego state
   // TODO(Daniel): use vehicle_info_utils
-  EgoState ego_state(*ego_kinematic_state, *ego_acceleration, 5.0);
-  input_data_map["ego_current_state"] = ego_state.as_array();
+  {
+    EgoState ego_state(*ego_kinematic_state, *ego_acceleration, 5.0);
+    input_data_map["ego_current_state"] = ego_state.as_array();
+  }
   // Agent data on ego reference frame
-  auto map_to_ego_transform = transforms_.second;
-  input_data_map["neighbor_agents_past"] =
-    get_ego_centric_agent_data(*objects, map_to_ego_transform).as_vector();
+  {
+    input_data_map["neighbor_agents_past"] =
+      get_ego_centric_agent_data(*objects, map_to_ego_transform).as_vector();
+  }
   // Static objects
   // TODO(Daniel): add static objects
-  input_data_map["static_objects"] = utils::create_float_data(
-    std::vector<int64_t>(STATIC_OBJECTS_SHAPE.begin(), STATIC_OBJECTS_SHAPE.end()), 0.0f);
-
-  // map data on ego reference frame
-  const auto center_x = static_cast<float>(ego_kinematic_state->pose.pose.position.x);
-  const auto center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
-  std::tuple<Eigen::MatrixXf, ColLaneIDMaps> matrix_mapping_tuple =
-    preprocess::transform_and_select_rows(
-      map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
-      lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
-  const Eigen::MatrixXf & ego_centric_lane_segments = std::get<0>(matrix_mapping_tuple);
-  input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
-  input_data_map["lanes_speed_limit"] =
-    preprocess::extract_lane_speed_tensor_data(ego_centric_lane_segments);
-
-  // route data on ego reference frame
-  const auto & current_pose = ego_kinematic_state->pose.pose;
-  lanelet::ConstLanelet current_preferred_lane;
-  constexpr double backward_path_length{5.0};
-  constexpr double forward_path_length{200.0};
-
-  if (!route_handler_->getClosestPreferredLaneletWithinRoute(
-        current_pose, &current_preferred_lane)) {
-    auto clock{rclcpp::Clock{RCL_ROS_TIME}};
-    RCLCPP_ERROR_STREAM_THROTTLE(
-      rclcpp::get_logger("diffusion_planner").get_child("utils"), clock, 1000,
-      "failed to find closest lanelet within route!!!");
-    return {};
+  {
+    input_data_map["static_objects"] = utils::create_float_data(
+      std::vector<int64_t>(STATIC_OBJECTS_SHAPE.begin(), STATIC_OBJECTS_SHAPE.end()), 0.0f);
   }
 
-  // For current_lanes with desired length
-  auto current_lanes = route_handler_->getLaneletSequence(
-    current_preferred_lane, backward_path_length, forward_path_length);
+  // map data on ego reference frame
+  {
+    std::tuple<Eigen::MatrixXf, ColLaneIDMaps> matrix_mapping_tuple =
+      preprocess::transform_and_select_rows(
+        map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
+        lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
+    const Eigen::MatrixXf & ego_centric_lane_segments = std::get<0>(matrix_mapping_tuple);
+    input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
+    input_data_map["lanes_speed_limit"] =
+      preprocess::extract_lane_speed_tensor_data(ego_centric_lane_segments);
+  }
 
-  input_data_map["route_lanes"] = preprocess::get_route_segments(
-    map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
-    lanelet_map_ptr_, current_lanes);
+  // route data on ego reference frame
+  {
+    const auto & current_pose = ego_kinematic_state->pose.pose;
+    lanelet::ConstLanelet current_preferred_lane;
+    constexpr double backward_path_length{5.0};
+    constexpr double forward_path_length{200.0};
+
+    if (!route_handler_->getClosestPreferredLaneletWithinRoute(
+          current_pose, &current_preferred_lane)) {
+      RCLCPP_ERROR_STREAM_THROTTLE(
+        get_logger(), *this->get_clock(), 5000, "failed to find closest lanelet within route!!!");
+      return {};
+    }
+    auto current_lanes = route_handler_->getLaneletSequence(
+      current_preferred_lane, backward_path_length, forward_path_length);
+
+    input_data_map["route_lanes"] = preprocess::get_route_segments(
+      map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
+      lanelet_map_ptr_, current_lanes);
+  }
   return input_data_map;
 }
 
