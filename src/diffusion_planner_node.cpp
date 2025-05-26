@@ -66,6 +66,8 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   normalization_map_ = utils::load_normalization_stats(params_.args_path);
   load_model(params_.model_path);
 
+  vehicle_info_ = autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo();
+
   timer_ = rclcpp::create_timer(
     this, get_clock(), rclcpp::Rate(params_.planning_frequency_hz).period(),
     std::bind(&DiffusionPlanner::on_timer, this));
@@ -197,7 +199,8 @@ InputDataMap DiffusionPlanner::create_input_data()
   // Ego state
   // TODO(Daniel): use vehicle_info_utils
   {
-    EgoState ego_state(*ego_kinematic_state, *ego_acceleration, 5.0);
+    EgoState ego_state(
+      *ego_kinematic_state, *ego_acceleration, static_cast<float>(vehicle_info_.wheel_base_m));
     input_data_map["ego_current_state"] = ego_state.as_array();
   }
   // Agent data on ego reference frame
