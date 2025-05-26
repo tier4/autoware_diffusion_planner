@@ -197,7 +197,6 @@ InputDataMap DiffusionPlanner::create_input_data()
   const auto & center_y = static_cast<float>(ego_kinematic_state->pose.pose.position.y);
 
   // Ego state
-  // TODO(Daniel): use vehicle_info_utils
   {
     EgoState ego_state(
       *ego_kinematic_state, *ego_acceleration, static_cast<float>(vehicle_info_.wheel_base_m));
