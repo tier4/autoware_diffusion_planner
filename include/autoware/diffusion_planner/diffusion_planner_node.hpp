@@ -24,6 +24,7 @@
 
 #include <Eigen/Dense>
 #include <autoware/route_handler/route_handler.hpp>
+#include <autoware/vehicle_info_utils/vehicle_info.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_utils/ros/polling_subscriber.hpp>
 #include <autoware_utils/ros/update_param.hpp>
@@ -77,6 +78,7 @@ using nav_msgs::msg::Odometry;
 using HADMapBin = autoware_map_msgs::msg::LaneletMapBin;
 using InputDataMap = std::unordered_map<std::string, std::vector<float>>;
 using autoware::route_handler::RouteHandler;
+using autoware::vehicle_info_utils::VehicleInfo;
 using builtin_interfaces::msg::Duration;
 using builtin_interfaces::msg::Time;
 using geometry_msgs::msg::Point;
@@ -185,6 +187,7 @@ public:
     vector_map_subscriber_{this, "~/input/vector_map", rclcpp::QoS{1}.transient_local()};
   rclcpp::Subscription<HADMapBin>::SharedPtr sub_map_;
   UUID generator_uuid_;
+  VehicleInfo vehicle_info_;
 };
 
 std::vector<float> load_tensor(const std::string & filename)
