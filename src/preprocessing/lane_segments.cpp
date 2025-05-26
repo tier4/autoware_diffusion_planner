@@ -135,7 +135,7 @@ Eigen::RowVector4f get_traffic_signal_row_vector(
     static_cast<float>(is_green) + static_cast<float>(is_amber) + static_cast<float>(is_red) >
     1.f) {
     throw std::invalid_argument("more than one traffic light");
-    return {};
+    return {0.f, 0.f, 0.f, 1.f};
   }
   return {
     static_cast<float>(is_green), static_cast<float>(is_amber), static_cast<float>(is_red),

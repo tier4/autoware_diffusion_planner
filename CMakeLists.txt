@@ -45,7 +45,9 @@ if(BUILD_TESTING)
   tests/agent_test.cpp
   tests/lanelet_test.cpp
   tests/ego_test.cpp
-  tests/lane_segments_test.cpp)
+  tests/lane_segments_test.cpp
+  tests/pre_processing_utils_test.cpp
+  tests/fixed_queue_test.cpp)
 
 target_link_libraries(test_diffusion_planner autoware_diffusion_planner_component)
 
