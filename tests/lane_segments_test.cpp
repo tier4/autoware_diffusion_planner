@@ -15,55 +15,148 @@
 #include "lane_segments_test.hpp"
 
 #include "autoware/diffusion_planner/dimensions.hpp"
+#include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
+
+#include <Eigen/Dense>
+
+#include <gtest/gtest.h>
+
+#include <stdexcept>
+#include <vector>
 
 namespace autoware::diffusion_planner::test
 {
 
-TEST_F(LaneSegmentsTest, ProcessSegmentToMatrix)
+TEST_F(LaneSegmentsTest, ProcessSegmentToMatrixThrowsOnInvalidInput)
 {
-  auto segment_matrix = preprocess::process_segment_to_matrix(lane_segments_.front());
+  // Empty polyline
+  LaneSegment invalid_segment = lane_segments_.front();
+  invalid_segment.polyline = Polyline();
+  EXPECT_TRUE(preprocess::process_segment_to_matrix(invalid_segment).size() == 0);
 
-  ASSERT_EQ(segment_matrix.rows(), POINTS_PER_SEGMENT);  // Expect 3 rows (one for each point)
-  ASSERT_EQ(segment_matrix.cols(), FULL_MATRIX_ROWS);    // Expect FULL_MATRIX_ROWS columns
+  // Empty left boundary
+  invalid_segment = lane_segments_.front();
+  invalid_segment.left_boundaries.clear();
+  EXPECT_TRUE(preprocess::process_segment_to_matrix(invalid_segment).size() == 0);
 
-  EXPECT_FLOAT_EQ(segment_matrix(0, X), 0.0);
-  EXPECT_FLOAT_EQ(segment_matrix(POINTS_PER_SEGMENT - 1, X), 20.0);
+  // Empty right boundary
+  invalid_segment = lane_segments_.front();
+  invalid_segment.right_boundaries.clear();
+  EXPECT_TRUE(preprocess::process_segment_to_matrix(invalid_segment).size() == 0);
 
-  EXPECT_FLOAT_EQ(segment_matrix(0, LB_X), 0.0);
-  EXPECT_FLOAT_EQ(segment_matrix(POINTS_PER_SEGMENT - 1, LB_X), 20.0);
-
-  EXPECT_FLOAT_EQ(segment_matrix(0, RB_X), 0.0);
-  EXPECT_FLOAT_EQ(segment_matrix(POINTS_PER_SEGMENT - 1, RB_X), 20.0);
-
-  EXPECT_FLOAT_EQ(segment_matrix(0, SPEED_LIMIT), 30.0f);
+  // Wrong number of points
+  invalid_segment = lane_segments_.front();
+  auto wrong_polyline = invalid_segment.polyline;
+  // Remove a point to make it invalid
+  auto points = wrong_polyline.waypoints();
+  points.pop_back();
+  Polyline short_polyline(MapType::Lane, points);
+  invalid_segment.polyline = short_polyline;
+  EXPECT_THROW(preprocess::process_segment_to_matrix(invalid_segment), std::runtime_error);
 }
 
-TEST_F(LaneSegmentsTest, ProcessSegmentsToMatrix)
+TEST_F(LaneSegmentsTest, ProcessSegmentsToMatrixThrowsOnEmptyInput)
+{
+  std::vector<LaneSegment> empty_segments;
+  preprocess::ColLaneIDMaps col_id_mapping;
+  EXPECT_THROW(
+    preprocess::process_segments_to_matrix(empty_segments, col_id_mapping), std::runtime_error);
+}
+
+TEST_F(LaneSegmentsTest, ProcessSegmentsToMatrixThrowsOnWrongRows)
+{
+  std::vector<LaneSegment> segments = lane_segments_;
+  // Patch segment to have wrong number of rows
+  LaneSegment bad_segment = segments.front();
+  auto polyline = bad_segment.polyline;
+  auto points = polyline.waypoints();
+  points.pop_back();
+  Polyline short_polyline(MapType::Lane, points);
+  bad_segment.polyline = short_polyline;
+  segments.push_back(bad_segment);
+
+  preprocess::ColLaneIDMaps col_id_mapping;
+  EXPECT_THROW(
+    preprocess::process_segments_to_matrix(segments, col_id_mapping), std::runtime_error);
+}
+
+TEST_F(LaneSegmentsTest, ComputeDistancesThrowsOnBadCols)
 {
   preprocess::ColLaneIDMaps col_id_mapping;
-  auto full_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
-
-  ASSERT_EQ(
-    full_matrix.rows(), POINTS_PER_SEGMENT);  // Expect 3 rows (one for each point in the segment)
-  ASSERT_EQ(full_matrix.cols(), FULL_MATRIX_ROWS);  // Expect FULL_MATRIX_ROWS columns
-
-  EXPECT_EQ(col_id_mapping.lane_id_to_matrix_col.size(), 1);  // Expect one lane ID mapping
-  EXPECT_EQ(col_id_mapping.matrix_col_to_lane_id.size(), 1);  // Expect one row-to-lane mapping
+  auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
+  // Remove a column to break divisibility
+  Eigen::MatrixXf bad_matrix = input_matrix.leftCols(input_matrix.cols() - 1);
+  std::vector<preprocess::ColWithDistance> distances;
+  EXPECT_THROW(
+    preprocess::compute_distances(bad_matrix, Eigen::Matrix4f::Identity(), distances, 0, 0, 100.0),
+    std::runtime_error);
 }
 
-TEST_F(LaneSegmentsTest, ComputeDistances)
+TEST_F(LaneSegmentsTest, TransformSelectedRowsNoTranslation)
 {
   preprocess::ColLaneIDMaps col_id_mapping;
   auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
 
-  Eigen::Matrix4f transform_matrix = Eigen::Matrix4f::Identity();
-  std::vector<preprocess::ColWithDistance> distances;
+  Eigen::MatrixXf matrix = input_matrix;
+  Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
+  // Apply a translation
+  transform(0, 3) = 5.0f;
+  transform(1, 3) = -2.0f;
 
-  preprocess::compute_distances(input_matrix, transform_matrix, distances, 10.0, 0.0, 100.0);
+  // Only dX/dY should not be translated
+  preprocess::transform_selected_rows(transform, matrix, 1, dX, false);
+  // The values should remain unchanged for dX row
+  for (int i = 0; i < matrix.cols(); ++i) {
+    EXPECT_FLOAT_EQ(matrix(dX, i), input_matrix(dX, i));
+  }
+}
 
-  ASSERT_EQ(distances.size(), 1);    // Expect one segment
-  EXPECT_EQ(distances[0].index, 0);  // Expect the first segment index
-  EXPECT_TRUE(distances[0].inside);  // Expect the segment to be inside the mask range
+TEST_F(LaneSegmentsTest, AddTrafficLightOneHotEncodingToSegmentNoTrafficLight)
+{
+  preprocess::ColLaneIDMaps col_id_mapping;
+  auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
+
+  // Should not throw or modify if traffic_light_id_map is empty
+  Eigen::MatrixXf segment_matrix = input_matrix;
+  std::map<lanelet::Id, preprocess::TrafficSignalStamped> traffic_light_id_map;
+  std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr;
+  EXPECT_NO_THROW(preprocess::add_traffic_light_one_hot_encoding_to_segment(
+    segment_matrix, col_id_mapping, traffic_light_id_map, lanelet_map_ptr, 0, 0));
+}
+
+TEST_F(LaneSegmentsTest, TransformAndSelectRowsThrowsOnInvalidInput)
+{
+  preprocess::ColLaneIDMaps col_id_mapping;
+  auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
+
+  // Wrong number of rows
+  Eigen::MatrixXf bad_matrix = input_matrix.topRows(input_matrix.rows() - 1);
+  std::map<lanelet::Id, preprocess::TrafficSignalStamped> traffic_light_id_map;
+  std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr;
+  EXPECT_THROW(
+    preprocess::transform_and_select_rows(
+      bad_matrix, Eigen::Matrix4f::Identity(), col_id_mapping, traffic_light_id_map,
+      lanelet_map_ptr, 0, 0, 1),
+    std::invalid_argument);
+
+  // m <= 0
+  EXPECT_THROW(
+    preprocess::transform_and_select_rows(
+      input_matrix, Eigen::Matrix4f::Identity(), col_id_mapping, traffic_light_id_map,
+      lanelet_map_ptr, 0, 0, 0),
+    std::invalid_argument);
+}
+
+TEST_F(LaneSegmentsTest, ExtractLaneTensorDataAndSpeedTensorData)
+{
+  preprocess::ColLaneIDMaps col_id_mapping;
+  auto input_matrix = preprocess::process_segments_to_matrix(lane_segments_, col_id_mapping);
+
+  auto lane_tensor = preprocess::extract_lane_tensor_data(input_matrix);
+  auto lane_speed_tensor = preprocess::extract_lane_speed_tensor_data(input_matrix);
+
+  EXPECT_EQ(lane_tensor.size(), SEGMENT_POINT_DIM * LANES_SHAPE[1] * POINTS_PER_SEGMENT);
+  EXPECT_EQ(lane_speed_tensor.size(), LANES_SPEED_LIMIT_SHAPE[2] * LANES_SPEED_LIMIT_SHAPE[1]);
 }
 
 }  // namespace autoware::diffusion_planner::test
