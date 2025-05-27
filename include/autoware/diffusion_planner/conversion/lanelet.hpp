@@ -26,10 +26,8 @@
 #include <lanelet2_core/primitives/LineString.h>
 #include <lanelet2_core/utility/Optional.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <optional>
 #include <string>
 #include <utility>
@@ -264,12 +262,12 @@ public:
    * @param distance_threshold Distance threshold from the specified position.
    * @return std::vector<LanePoint>
    */
-  [[nodiscard]] std::vector<LanePoint> from_linestring(
+  [[nodiscard]] static std::vector<LanePoint> from_linestring(
     const lanelet::ConstLineString3d & linestring, const geometry_msgs::msg::Point & position,
-    double distance_threshold) const noexcept;
+    double distance_threshold) noexcept;
 
-  [[nodiscard]] std::vector<LanePoint> from_linestring(
-    const lanelet::ConstLineString3d & linestring) const noexcept;
+  [[nodiscard]] static std::vector<LanePoint> from_linestring(
+    const lanelet::ConstLineString3d & linestring) noexcept;
 
   /**
    * @brief Convert a polygon to the set of polylines.
@@ -279,12 +277,12 @@ public:
    * @param distance_threshold Distance threshold from the specified position.
    * @return std::vector<LanePoint>
    */
-  [[nodiscard]] std::vector<LanePoint> from_polygon(
+  [[nodiscard]] static std::vector<LanePoint> from_polygon(
     const lanelet::CompoundPolygon3d & polygon, const geometry_msgs::msg::Point & position,
-    double distance_threshold) const noexcept;
+    double distance_threshold) noexcept;
 
-  [[nodiscard]] std::vector<LanePoint> from_polygon(
-    const lanelet::CompoundPolygon3d & polygon) const noexcept;
+  [[nodiscard]] static std::vector<LanePoint> from_polygon(
+    const lanelet::CompoundPolygon3d & polygon) noexcept;
 
   lanelet::LaneletMapConstPtr lanelet_map_ptr_;  //!< Pointer of lanelet map.
   size_t max_num_polyline_;                      //!< The max number of polylines.

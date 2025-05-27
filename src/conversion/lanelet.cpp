@@ -27,7 +27,6 @@
 #include <iostream>
 #include <optional>
 #include <vector>
-
 namespace autoware::diffusion_planner
 {
 enum LIGHT_SIGNAL_STATE {
@@ -44,21 +43,6 @@ inline float euclidean_distance(const LanePoint & p1, const LanePoint & p2)
   float dy = p2.y() - p1.y();
   float dz = p2.z() - p1.z();
   return std::sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-// Linearly interpolate between two LanePoints
-inline LanePoint linear_interpolate(const LanePoint & p1, const LanePoint & p2, float t)
-{
-  float x = p1.x() + t * (p2.x() - p1.x());
-  float y = p1.y() + t * (p2.y() - p1.y());
-  float z = p1.z() + t * (p2.z() - p1.z());
-
-  float dx = (1 - t) * (p1.data_ptr()[3]) + t * (p2.data_ptr()[3]);
-  float dy = (1 - t) * (p1.data_ptr()[4]) + t * (p2.data_ptr()[4]);
-  float dz = (1 - t) * (p1.data_ptr()[5]) + t * (p2.data_ptr()[5]);
-  float label = 0.0;  // TODO(Daniel): add labels
-
-  return {x, y, z, dx, dy, dz, label};
 }
 
 std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, size_t num_points)
@@ -131,7 +115,7 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments(
 
     const auto & attrs = lanelet.attributes();
     bool is_intersection = attrs.find("turn_direction") != attrs.end();
-    std::optional<float> speed_limit_mph = attrs.find("speed_limit") != attrs.end()
+    std::optional<float> speed_limit_mps = attrs.find("speed_limit") != attrs.end()
                                              ? std::make_optional(autoware_utils_math::kmph2mps(
                                                  std::stof(attrs.at("speed_limit").value())))
                                              : std::nullopt;
@@ -140,7 +124,7 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments(
     auto traffic_light = TrafficLightElement::UNKNOWN;
     lane_segments.emplace_back(
       lanelet.id(), lane_polyline, is_intersection, left_boundary_segments, right_boundary_segments,
-      speed_limit_mph, traffic_light);
+      speed_limit_mps, traffic_light);
   }
   return lane_segments;
 }
@@ -192,7 +176,7 @@ std::optional<PolylineData> LaneletConverter::convert(
 }
 
 std::vector<LanePoint> LaneletConverter::from_linestring(
-  const lanelet::ConstLineString3d & linestring) const noexcept
+  const lanelet::ConstLineString3d & linestring) noexcept
 {
   if (linestring.size() == 0) {
     return {};
@@ -200,7 +184,9 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
 
   std::vector<LanePoint> output;
   for (auto itr = linestring.begin(); itr != linestring.end(); ++itr) {
-    double dx, dy, dz;
+    double dx{0.0};
+    double dy{0.0};
+    double dz{0.0};
     constexpr double epsilon = 1e-6;
     if (itr == linestring.begin()) {
       dx = 0.0;
@@ -210,10 +196,11 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
       dx = itr->x() - (itr - 1)->x();
       dy = itr->y() - (itr - 1)->y();
       dz = itr->z() - (itr - 1)->z();
-      const auto norm = std::hypot(dx, dy, dz);
-      dx /= (norm + epsilon);
-      dy /= (norm + epsilon);
-      dz /= (norm + epsilon);
+      auto norm = std::hypot(dx, dy, dz);
+      norm = (norm > epsilon) ? norm : 1.0;
+      dx /= (norm);
+      dy /= (norm);
+      dz /= (norm);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
@@ -223,7 +210,7 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
 
 std::vector<LanePoint> LaneletConverter::from_linestring(
   const lanelet::ConstLineString3d & linestring, const geometry_msgs::msg::Point & position,
-  double distance_threshold) const noexcept
+  double distance_threshold) noexcept
 {
   if (linestring.size() == 0) {
     return {};
@@ -236,7 +223,9 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
         distance > distance_threshold) {
       continue;
     }
-    double dx, dy, dz;
+    double dx{0.0};
+    double dy{0.0};
+    double dz{0.0};
     constexpr double epsilon = 1e-6;
     if (itr == linestring.begin()) {
       dx = 0.0;
@@ -246,10 +235,11 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
       dx = itr->x() - (itr - 1)->x();
       dy = itr->y() - (itr - 1)->y();
       dz = itr->z() - (itr - 1)->z();
-      const auto norm = std::hypot(dx, dy, dz);
-      dx /= (norm + epsilon);
-      dy /= (norm + epsilon);
-      dz /= (norm + epsilon);
+      auto norm = std::hypot(dx, dy, dz);
+      norm = (norm > epsilon) ? norm : 1.0;
+      dx /= (norm);
+      dy /= (norm);
+      dz /= (norm);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
@@ -258,7 +248,7 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
 }
 
 std::vector<LanePoint> LaneletConverter::from_polygon(
-  const lanelet::CompoundPolygon3d & polygon) const noexcept
+  const lanelet::CompoundPolygon3d & polygon) noexcept
 {
   if (polygon.size() == 0) {
     return {};
@@ -266,7 +256,9 @@ std::vector<LanePoint> LaneletConverter::from_polygon(
 
   std::vector<LanePoint> output;
   for (auto itr = polygon.begin(); itr != polygon.end(); ++itr) {
-    double dx, dy, dz;
+    double dx{0.0};
+    double dy{0.0};
+    double dz{0.0};
     constexpr double epsilon = 1e-6;
     if (itr == polygon.begin()) {
       dx = 0.0;
@@ -276,10 +268,11 @@ std::vector<LanePoint> LaneletConverter::from_polygon(
       dx = itr->x() - (itr - 1)->x();
       dy = itr->y() - (itr - 1)->y();
       dz = itr->z() - (itr - 1)->z();
-      const auto norm = std::hypot(dx, dy, dz);
-      dx /= (norm + epsilon);
-      dy /= (norm + epsilon);
-      dz /= (norm + epsilon);
+      auto norm = std::hypot(dx, dy, dz);
+      norm = (norm > epsilon) ? norm : 1.0;
+      dx /= (norm);
+      dy /= (norm);
+      dz /= (norm);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
@@ -289,7 +282,7 @@ std::vector<LanePoint> LaneletConverter::from_polygon(
 
 std::vector<LanePoint> LaneletConverter::from_polygon(
   const lanelet::CompoundPolygon3d & polygon, const geometry_msgs::msg::Point & position,
-  double distance_threshold) const noexcept
+  double distance_threshold) noexcept
 {
   if (polygon.size() == 0) {
     return {};
@@ -302,7 +295,9 @@ std::vector<LanePoint> LaneletConverter::from_polygon(
         distance > distance_threshold) {
       continue;
     }
-    double dx, dy, dz;
+    double dx{0.0};
+    double dy{0.0};
+    double dz{0.0};
     constexpr double epsilon = 1e-6;
     if (itr == polygon.begin()) {
       dx = 0.0;
@@ -312,10 +307,11 @@ std::vector<LanePoint> LaneletConverter::from_polygon(
       dx = itr->x() - (itr - 1)->x();
       dy = itr->y() - (itr - 1)->y();
       dz = itr->z() - (itr - 1)->z();
-      const auto norm = std::hypot(dx, dy, dz);
-      dx /= (norm + epsilon);
-      dy /= (norm + epsilon);
-      dz /= (norm + epsilon);
+      auto norm = std::hypot(dx, dy, dz);
+      norm = (norm > epsilon) ? norm : 1.0;
+      dx /= (norm);
+      dy /= (norm);
+      dz /= (norm);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
