@@ -178,34 +178,11 @@ std::optional<PolylineData> LaneletConverter::convert(
 std::vector<LanePoint> LaneletConverter::from_linestring(
   const lanelet::ConstLineString3d & linestring) noexcept
 {
-  if (linestring.size() == 0) {
-    return {};
-  }
-
-  std::vector<LanePoint> output;
-  for (auto itr = linestring.begin(); itr != linestring.end(); ++itr) {
-    double dx{0.0};
-    double dy{0.0};
-    double dz{0.0};
-    constexpr double epsilon = 1e-6;
-    if (itr == linestring.begin()) {
-      dx = 0.0;
-      dy = 0.0;
-      dz = 0.0;
-    } else {
-      dx = itr->x() - (itr - 1)->x();
-      dy = itr->y() - (itr - 1)->y();
-      dz = itr->z() - (itr - 1)->z();
-      auto norm = std::hypot(dx, dy, dz);
-      norm = (norm > epsilon) ? norm : 1.0;
-      dx /= (norm);
-      dy /= (norm);
-      dz /= (norm);
-    }
-    output.emplace_back(
-      itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
-  }
-  return output;
+  geometry_msgs::msg::Point position;
+  position.x = 0.0;
+  position.y = 0.0;
+  position.z = 0.0;
+  return from_linestring(linestring, position, std::numeric_limits<double>::max());
 }
 
 std::vector<LanePoint> LaneletConverter::from_linestring(
@@ -250,34 +227,11 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
 std::vector<LanePoint> LaneletConverter::from_polygon(
   const lanelet::CompoundPolygon3d & polygon) noexcept
 {
-  if (polygon.size() == 0) {
-    return {};
-  }
-
-  std::vector<LanePoint> output;
-  for (auto itr = polygon.begin(); itr != polygon.end(); ++itr) {
-    double dx{0.0};
-    double dy{0.0};
-    double dz{0.0};
-    constexpr double epsilon = 1e-6;
-    if (itr == polygon.begin()) {
-      dx = 0.0;
-      dy = 0.0;
-      dz = 0.0;
-    } else {
-      dx = itr->x() - (itr - 1)->x();
-      dy = itr->y() - (itr - 1)->y();
-      dz = itr->z() - (itr - 1)->z();
-      auto norm = std::hypot(dx, dy, dz);
-      norm = (norm > epsilon) ? norm : 1.0;
-      dx /= (norm);
-      dy /= (norm);
-      dz /= (norm);
-    }
-    output.emplace_back(
-      itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
-  }
-  return output;
+  geometry_msgs::msg::Point position;
+  position.x = 0.0;
+  position.y = 0.0;
+  position.z = 0.0;
+  return from_polygon(polygon, position, std::numeric_limits<double>::max());
 }
 
 std::vector<LanePoint> LaneletConverter::from_polygon(
