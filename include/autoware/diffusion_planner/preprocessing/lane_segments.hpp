@@ -44,30 +44,36 @@ namespace autoware::diffusion_planner::preprocess
 {
 using autoware_planning_msgs::msg::LaneletRoute;
 /**
- * @brief Represents a row index with its associated distance and whether it is inside a mask range.
+ * @brief Represents a column index with its associated distance and whether it is inside a mask
+ * range.
  */
 struct ColWithDistance
 {
-  long index;              //!< col index in the input matrix.
+  long index;              //!< Column index in the input matrix.
   float distance_squared;  //!< Squared distance from the center.
-  bool inside;             //!< Whether the col is within the mask range.
+  bool inside;             //!< Whether the column is within the mask range.
 };
 
+/**
+ * @brief Maps between lanelet IDs and matrix column indices.
+ */
 struct ColLaneIDMaps
 {
-  std::map<lanelet::Id, long> lane_id_to_matrix_col;
-  std::map<long, lanelet::Id> matrix_col_to_lane_id;
+  std::map<lanelet::Id, long> lane_id_to_matrix_col;  //!< Lanelet ID to matrix column index.
+  std::map<long, lanelet::Id> matrix_col_to_lane_id;  //!< Matrix column index to lanelet ID.
 };
 
 /**
  * @brief Extracts route segments from the map lane segments matrix and transforms them to
  * ego-centric coordinates.
+ *
  * @param map_lane_segments_matrix Matrix containing lane segment data in map coordinates.
- * @param route_ptr_ Shared pointer to the route containing the segments to extract.
- * @param col_id_mapping Map of segment IDs to their corresponding row indices in the lane
+ * @param transform_matrix Transformation matrix to apply to the points.
+ * @param col_id_mapping Map of segment IDs to their corresponding column indices in the lane
  * segments matrix.
- * @param center_x X-coordinate of the ego vehicle's center.
- * @param center_y Y-coordinate of the ego vehicle's center.
+ * @param traffic_light_id_map Map of lanelet IDs to traffic signal information.
+ * @param lanelet_map_ptr Shared pointer to the lanelet map.
+ * @param current_lanes List of current lanelets to extract.
  * @return A flattened vector containing the transformed route segments in ego-centric coordinates.
  */
 std::vector<float> get_route_segments(
@@ -97,9 +103,9 @@ std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_s
  * @brief Processes multiple lane segments and converts them into a single matrix.
  *
  * @param lane_segments Vector of lane segments to process.
- * @param segment_row_indices Map to store the starting row index of each segment in the resulting
+ * @param col_id_mapping Map to store the starting column index of each segment in the resulting
  * matrix.
- * @return A matrix containing the processed lane segment data.
+ * @return A matrix containing the processed lane segment data (transposed: columns are segments).
  * @throws std::runtime_error If any segment matrix does not have the expected number of rows.
  */
 Eigen::MatrixXf process_segments_to_matrix(
@@ -119,10 +125,10 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment);
  *
  * @param input_matrix Input matrix containing lane segment data.
  * @param transform_matrix Transformation matrix to apply to the points.
- * @param distances Output vector to store row indices, distances, and mask inclusion.
+ * @param distances Output vector to store column indices, distances, and mask inclusion.
  * @param center_x X-coordinate of the center point.
  * @param center_y Y-coordinate of the center point.
- * @param mask_range Range within which rows are considered "inside" the mask.
+ * @param mask_range Range within which columns are considered "inside" the mask.
  */
 void compute_distances(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
@@ -130,9 +136,9 @@ void compute_distances(
   float mask_range = 100.0);
 
 /**
- * @brief Sorts the rows by their squared distances in ascending order.
+ * @brief Sorts the columns by their squared distances in ascending order.
  *
- * @param distances Vector of rows with distances to be sorted.
+ * @param distances Vector of columns with distances to be sorted.
  */
 inline void sort_indices_by_distance(std::vector<ColWithDistance> & distances)
 {
@@ -141,24 +147,47 @@ inline void sort_indices_by_distance(std::vector<ColWithDistance> & distances)
   });
 }
 
+/**
+ * @brief Adds one-hot encoded traffic light information to a segment matrix.
+ *
+ * @param segment_matrix The segment matrix to modify (in-place).
+ * @param col_id_mapping Mapping between lanelet IDs and matrix columns.
+ * @param traffic_light_id_map Map of lanelet IDs to traffic signal information.
+ * @param lanelet_map_ptr Shared pointer to the lanelet map.
+ * @param row_idx The row index in the matrix corresponding to the segment.
+ * @param col_counter The column counter for the segment.
+ */
 void add_traffic_light_one_hot_encoding_to_segment(
   [[maybe_unused]] Eigen::MatrixXf & segment_matrix, const ColLaneIDMaps & col_id_mapping,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const long row_idx,
   [[maybe_unused]] const long col_counter);
 
+/**
+ * @brief Returns a one-hot encoded row vector for the traffic signal state.
+ *
+ * @param signal The traffic light group message.
+ * @return Row vector with one-hot encoding for [green, amber, red, unknown].
+ */
 Eigen::RowVector4f get_traffic_signal_row_vector(
   const autoware_perception_msgs::msg::TrafficLightGroup & signal);
 
+/**
+ * @brief Applies coordinate transforms to the output matrix for all segments.
+ *
+ * @param transform_matrix Transformation matrix to apply.
+ * @param output_matrix Matrix to transform (in-place).
+ * @param num_segments Number of segments to transform.
+ */
 void apply_transforms(
   const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long num_segments);
 
 /**
- * @brief Transforms selected columns of the output matrix using a transformation matrix.
+ * @brief Transforms selected rows of the output matrix using a transformation matrix.
  *
  * @param transform_matrix Transformation matrix to apply.
  * @param output_matrix Matrix to transform (in-place).
- * @param column_idx Index of the column to transform.
+ * @param num_segments Number of segments to transform.
  * @param row_idx Index of the row to transform.
  * @param do_translation Whether to apply translation during the transformation.
  */
@@ -167,13 +196,15 @@ void transform_selected_rows(
   long row_idx, bool do_translation = true);
 
 /**
- * @brief Transforms and selects rows from the input matrix based on distances.
+ * @brief Transforms and selects columns from the input matrix based on distances, and adds traffic
+ * info.
  *
  * @param input_matrix Input matrix containing lane segment data.
  * @param transform_matrix Transformation matrix to apply to the points.
- * @param distances Vector of rows with distances, used to select rows.
- * @param m Maximum number of rows to select.
- * @return Transformed matrix containing the selected rows.
+ * @param distances Vector of columns with distances, used to select columns.
+ * @param lanelet_map_ptr Shared pointer to the lanelet map.
+ * @param m Maximum number of columns (segments) to select.
+ * @return Tuple of the transformed matrix and updated column ID mapping.
  */
 std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info(
   const Eigen::MatrixXf & input_matrix, [[maybe_unused]] const Eigen::Matrix4f & transform_matrix,
@@ -181,14 +212,17 @@ std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info
   [[maybe_unused]] const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m);
 
 /**
- * @brief Transforms and selects rows from the input matrix based on proximity to a center point.
+ * @brief Transforms and selects columns from the input matrix based on proximity to a center point.
  *
  * @param input_matrix Input matrix containing lane segment data.
  * @param transform_matrix Transformation matrix to apply to the points.
+ * @param col_id_mapping Mapping between lanelet IDs and matrix columns.
+ * @param traffic_light_id_map Map of lanelet IDs to traffic signal information.
+ * @param lanelet_map_ptr Shared pointer to the lanelet map.
  * @param center_x X-coordinate of the center point.
  * @param center_y Y-coordinate of the center point.
- * @param m Maximum number of rows to select.
- * @return Transformed matrix containing the selected rows.
+ * @param m Maximum number of columns (segments) to select.
+ * @return Tuple of the transformed matrix and updated column ID mapping.
  * @throws std::invalid_argument If input_matrix dimensions are not correct or if m <= 0.
  */
 std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_and_select_rows(
@@ -197,6 +231,7 @@ std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_and_select_rows(
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y,
   const long m);
+
 }  // namespace autoware::diffusion_planner::preprocess
 
 #endif  // AUTOWARE__DIFFUSION_PLANNER__PREPROCESSING__LANE_SEGMENTS_HPP

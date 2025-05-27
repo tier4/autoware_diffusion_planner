@@ -106,18 +106,109 @@ struct DiffusionPlannerDebugParams
   bool publish_debug_map{false};
 };
 
+/**
+ * @class DiffusionPlanner
+ * @brief Main class for the diffusion-based trajectory planner node in Autoware.
+ *
+ * Handles parameter setup, map and route processing, ONNX model inference, and publishing of
+ * planned trajectories and debug information.
+ *
+ * @note This class integrates with ROS2, ONNX Runtime, and Autoware-specific utilities for
+ * autonomous vehicle trajectory planning.
+ *
+ * @section Responsibilities
+ * - Parameter management and dynamic reconfiguration
+ * - Map and route data handling
+ * - Preprocessing and normalization of input data for inference
+ * - Running inference using ONNX models
+ * - Postprocessing and publishing of predicted trajectories and debug markers
+ * - Managing subscriptions and publishers for required topics
+ *
+ * @section Members
+ * @brief
+ * - set_up_params: Initialize and declare node parameters.
+ * - on_timer: Timer callback for periodic processing and publishing.
+ * - on_map: Callback for receiving and processing map data.
+ * - load_model: Load ONNX model from file.
+ * - publish_debug_markers: Publish visualization markers for debugging.
+ * - publish_predictions: Publish model predictions.
+ * - do_inference: Run inference on input data and return predictions.
+ * - on_parameter: Callback for dynamic parameter updates.
+ * - create_input_data: Prepare input data for inference.
+ * - get_ego_centric_agent_data: Extract ego-centric agent data from tracked objects.
+ * - create_trajectory: Convert predictions to a trajectory in map coordinates.
+ *
+ * @section Internal State
+ * @brief
+ * - route_handler_: Handles route-related operations.
+ * - transforms_: Stores transformation matrices between map and ego frames.
+ * - ego_kinematic_state_: Current odometry state of the ego vehicle.
+ * - ONNX Runtime members: env_, session_options_, session_, allocator_, cuda_options_.
+ * - agent_data_: Optional input data for inference.
+ * - params_, debug_params_, normalization_map_: Node and debug parameters, normalization info.
+ * - Lanelet map and routing members: route_ptr_, lanelet_map_ptr_, routing_graph_ptr_,
+ * traffic_rules_ptr_, lanelet_converter_ptr_, lane_segments_, map_lane_segments_matrix_,
+ * col_id_mapping_, is_map_loaded_.
+ * - ROS2 node elements: timer_, publishers, subscriptions, and time_keeper_.
+ * - generator_uuid_: Unique identifier for the planner instance.
+ * - vehicle_info_: Vehicle-specific parameters.
+ */
 class DiffusionPlanner : public rclcpp::Node
 {
 public:
   explicit DiffusionPlanner(const rclcpp::NodeOptions & options);
+  /**
+   * @brief Initialize and declare node parameters.
+   */
   void set_up_params();
+
+  /**
+   * @brief Timer callback for periodic processing and publishing.
+   */
   void on_timer();
+
+  /**
+   * @brief Callback for receiving and processing map data.
+   * @param map_msg The received map message.
+   */
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
+
+  /**
+   * @brief Load ONNX model from file.
+   * @param model_path Path to the ONNX model file.
+   */
   void load_model(const std::string & model_path);
+
+  /**
+   * @brief Publish visualization markers for debugging.
+   * @param input_data_map Input data used for inference.
+   */
   void publish_debug_markers(InputDataMap & input_data_map) const;
+
+  /**
+   * @brief Publish model predictions.
+   * @param predictions Output from the ONNX model.
+   */
   void publish_predictions(Ort::Value & predictions) const;
+
+  /**
+   * @brief Run inference on input data and return predictions.
+   * @param input_data_map Input data for the model.
+   * @return Optional vector of ONNX model outputs.
+   */
   std::optional<std::vector<Ort::Value>> do_inference(InputDataMap & input_data_map);
+
+  /**
+   * @brief Callback for dynamic parameter updates.
+   * @param parameters Updated parameters.
+   * @return Result of parameter update.
+   */
   SetParametersResult on_parameter(const std::vector<rclcpp::Parameter> & parameters);
+
+  /**
+   * @brief Prepare input data for inference.
+   * @return Map of input data for the model.
+   */
   InputDataMap create_input_data();
 
   // preprocessing

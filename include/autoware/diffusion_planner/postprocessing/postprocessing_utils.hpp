@@ -42,33 +42,103 @@ using autoware_perception_msgs::msg::PredictedPath;
 using autoware_planning_msgs::msg::Trajectory;
 using unique_identifier_msgs::msg::UUID;
 
+/**
+ * @brief Applies a transformation to a block of the output matrix.
+ *
+ * @param transform_matrix The transformation matrix to apply.
+ * @param output_matrix The matrix to be transformed (in-place).
+ * @param column_idx The column index of the block to transform.
+ * @param row_idx The row index of the block to transform.
+ * @param do_translation Whether to apply translation (true) or not (false).
+ */
 void transform_output_matrix(
   const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
   long row_idx, bool do_translation = true);
 
+/**
+ * @brief Extracts tensor data from an ONNX prediction into an Eigen matrix.
+ *
+ * @param prediction The ONNX prediction output.
+ * @return An Eigen matrix containing the tensor data in row-major order.
+ */
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor_data(
   Ort::Value & prediction);
 
+/**
+ * @brief Converts ONNX prediction output to a prediction matrix in map coordinates.
+ *
+ * @param prediction The ONNX prediction output.
+ * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
+ * @param batch The batch index to extract.
+ * @param agent The agent index to extract.
+ * @return The prediction matrix for the specified batch and agent.
+ */
 Eigen::MatrixXf get_prediction_matrix(
   Ort::Value & prediction, const Eigen::Matrix4f & transform_ego_to_map, const long batch = 0,
   const long agent = 0);
 
+/**
+ * @brief Creates PredictedObjects message from ONNX prediction and agent data.
+ *
+ * @param prediction The ONNX prediction output.
+ * @param ego_centric_agent_data The agent data in ego-centric coordinates.
+ * @param stamp The ROS time stamp for the message.
+ * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
+ * @return A PredictedObjects message containing predicted paths for each agent.
+ */
 PredictedObjects create_predicted_objects(
   Ort::Value & prediction, const AgentData & ego_centric_agent_data, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map);
 
+/**
+ * @brief Converts a prediction matrix to a Trajectory message.
+ *
+ * @param prediction_matrix The prediction matrix for a single agent.
+ * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
+ * @param stamp The ROS time stamp for the message.
+ * @return A Trajectory message in map coordinates.
+ */
 Trajectory get_trajectory_from_prediction_matrix(
   const Eigen::MatrixXf & prediction_matrix, const Eigen::Matrix4f & transform_ego_to_map,
   const rclcpp::Time & stamp);
 
+/**
+ * @brief Creates a Trajectory message from ONNX prediction for a specific batch and agent.
+ *
+ * @param prediction The ONNX prediction output.
+ * @param stamp The ROS time stamp for the message.
+ * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
+ * @param batch The batch index to extract.
+ * @param agent The agent index to extract.
+ * @return A Trajectory message for the specified batch and agent.
+ */
 Trajectory create_trajectory(
   Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
   long batch, long agent);
 
+/**
+ * @brief Creates multiple Trajectory messages from ONNX prediction for a range of batches and
+ * agents.
+ *
+ * @param prediction The ONNX prediction output.
+ * @param stamp The ROS time stamp for the messages.
+ * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
+ * @param start_batch The starting batch index.
+ * @param start_agent The starting agent index.
+ * @return A vector of Trajectory messages.
+ */
 std::vector<Trajectory> create_multiple_trajectories(
   Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
   long start_batch, long start_agent);
 
+/**
+ * @brief Converts a Trajectory message to a Trajectories message with generator info.
+ *
+ * @param trajectory The Trajectory message to convert.
+ * @param generator_uuid The UUID of the trajectory generator.
+ * @param generator_name The name of the trajectory generator.
+ * @return A Trajectories message containing the input trajectory and generator info.
+ */
 Trajectories to_trajectories_msg(
   const Trajectory & trajectory, const UUID & generator_uuid, const std::string & generator_name);
 
