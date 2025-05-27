@@ -17,7 +17,6 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/lanelet.hpp"
-#include "autoware/diffusion_planner/dimensions.hpp"
 #include "autoware/diffusion_planner/preprocessing/lane_segments.hpp"
 #include "autoware/diffusion_planner/preprocessing/traffic_signals.hpp"
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
@@ -281,22 +280,5 @@ public:
   VehicleInfo vehicle_info_;
 };
 
-std::vector<float> load_tensor(const std::string & filename)
-{
-  std::ifstream file(filename, std::ios::binary);
-  if (!file) {
-    throw std::runtime_error("Failed to open file: " + filename);
-  }
-
-  file.seekg(0, std::ios::end);
-  std::streamsize size = file.tellg();
-  if (size % sizeof(float) != 0)
-    throw std::runtime_error("File size is not aligned with float size");
-
-  file.seekg(0, std::ios::beg);
-  std::vector<float> buffer(size / sizeof(float));
-  file.read(reinterpret_cast<char *>(buffer.data()), size);
-  return buffer;
-}
 }  // namespace autoware::diffusion_planner
 #endif  // AUTOWARE__DIFFUSION_PLANNER__DIFFUSION_PLANNER_NODE_HPP_

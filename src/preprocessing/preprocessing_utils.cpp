@@ -14,6 +14,10 @@
 
 #include "autoware/diffusion_planner/preprocessing/preprocessing_utils.hpp"
 
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
+
 namespace autoware::diffusion_planner::preprocess
 {
 void normalize_input_data(InputDataMap & input_data_map, const NormalizationMap & normalization_map)

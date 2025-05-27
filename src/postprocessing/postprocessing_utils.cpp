@@ -29,6 +29,7 @@
 
 #include <Eigen/src/Core/Matrix.h>
 
+#include <algorithm>
 #include <cstddef>
 
 namespace autoware::diffusion_planner::postprocessing
