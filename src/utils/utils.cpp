@@ -65,7 +65,7 @@ std::vector<float> create_float_data(const std::vector<int64_t> & shape, float f
   return data;
 }
 
-bool check_input_map(const std::unordered_map<std::string, std::vector<float>> input_map)
+bool check_input_map(const std::unordered_map<std::string, std::vector<float>> & input_map)
 {
   for (const auto & tup : input_map) {
     if (std::any_of(tup.second.begin(), tup.second.end(), [](const auto & v) {

@@ -15,12 +15,9 @@
 #ifndef AUTOWARE__DIFFUSION_PLANNER__POLYLINE_HPP_
 #define AUTOWARE__DIFFUSION_PLANNER__POLYLINE_HPP_
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <numeric>
-#include <stdexcept>
 #include <tuple>
 #include <vector>
 
@@ -49,7 +46,7 @@ struct LanePoint
   LanePoint(
     const float x, const float y, const float z, const float dx, const float dy, const float dz,
     const float label)
-  : data_({x, y, z, dx, dy, dz, label}), x_(x), y_(y), z_(z), label_(label)
+  : data_({x, y, z, dx, dy, dz, label}), x_(x), y_(y), z_(z), dx_(x), dy_(y), dz_(z), label_(label)
   {
   }
 
@@ -67,6 +64,15 @@ struct LanePoint
 
   // Return the z position of the point.
   [[nodiscard]] float z() const { return z_; }
+
+  // Return the x direction of the point.
+  [[nodiscard]] float dx() const { return dx_; }
+
+  // Return the y direction of the point.
+  [[nodiscard]] float dy() const { return dy_; }
+
+  // Return the z direction of the point.
+  [[nodiscard]] float dz() const { return dz_; }
 
   // Return the label of the point.
   [[nodiscard]] float label() const { return label_; }
@@ -100,7 +106,7 @@ struct LanePoint
 
 private:
   std::array<float, POINT_STATE_DIM> data_;
-  float x_{0.0f}, y_{0.0f}, z_{0.0f}, label_{0.0f};
+  float x_{0.0f}, y_{0.0f}, z_{0.0f}, dx_{0.0f}, dy_{0.0f}, dz_{0.0f}, label_{0.0f};
 };
 
 enum class MapType {
@@ -214,7 +220,7 @@ public:
   }
 
 private:
-  MapType polyline_type_;
+  MapType polyline_type_{MapType::Unused};
   std::vector<LanePoint> waypoints_;
 };
 
