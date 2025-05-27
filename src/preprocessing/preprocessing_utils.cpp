@@ -16,7 +16,7 @@
 
 namespace autoware::diffusion_planner::preprocess
 {
-void normalize_input_data(InputDataMap & input_data_map, NormalizationMap & normalization_map)
+void normalize_input_data(InputDataMap & input_data_map, const NormalizationMap & normalization_map)
 {
   auto normalize_vector = [](
                             std::vector<float> & data, const std::vector<float> & mean,
@@ -52,7 +52,7 @@ void normalize_input_data(InputDataMap & input_data_map, NormalizationMap & norm
       throw std::runtime_error(err.c_str());
     }
 
-    const auto & [mean, std_dev] = normalization_map[key];
+    const auto & [mean, std_dev] = normalization_map.at(key);
     normalize_vector(value, mean, std_dev);
   }
 }

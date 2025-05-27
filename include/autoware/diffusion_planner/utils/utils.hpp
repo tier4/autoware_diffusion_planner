@@ -45,6 +45,12 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
  */
 std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill = 1.0f);
 
+/**
+ * @brief Checks if the input map contains valid data.
+ *
+ * @param input_map An unordered_map with string keys and vector<float> values.
+ * @return True if the input map is valid, false otherwise.
+ */
 bool check_input_map(const std::unordered_map<std::string, std::vector<float>> input_map);
 
 }  // namespace autoware::diffusion_planner::utils

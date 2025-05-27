@@ -39,6 +39,20 @@ struct TrafficSignalStamped
   autoware_perception_msgs::msg::TrafficLightGroup signal;  ///< Traffic light group.
 };
 
+/**
+ * @brief Processes incoming traffic signal messages and updates the traffic signal map.
+ *
+ * This function takes a message containing an array of traffic light groups, updates the provided
+ * map of traffic signals with the latest information, and removes outdated signals based on the
+ * specified time threshold.
+ *
+ * @param msg Shared pointer to the incoming TrafficLightGroupArray message.
+ * @param traffic_signal_id_map Reference to the map storing traffic signal information, keyed by
+ * lanelet ID.
+ * @param current_time The current ROS time used for timestamp comparison.
+ * @param time_threshold_seconds Signals older than this threshold (in seconds) will be removed from
+ * the map.
+ */
 void process_traffic_signals(
   const autoware_perception_msgs::msg::TrafficLightGroupArray::ConstSharedPtr msg,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_signal_id_map,
