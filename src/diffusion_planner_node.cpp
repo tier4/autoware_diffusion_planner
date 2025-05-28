@@ -23,6 +23,9 @@
 #include "autoware/diffusion_planner/utils/utils.hpp"
 #include "onnxruntime_cxx_api.h"
 
+#include <autoware/cuda_utils/cuda_check_error.hpp>
+#include <autoware/cuda_utils/cuda_unique_ptr.hpp>
+#include <autoware/cuda_utils/stream_unique_ptr.hpp>
 #include <autoware_lanelet2_extension/utility/query.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logging.hpp>
@@ -138,9 +141,27 @@ void DiffusionPlanner::load_model(const std::string & model_path)
 {
   env_ = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "DiffusionPlanner");
   session_options_.SetLogSeverityLevel(1);
+
+  // Enable TensorRT execution provider first (highest priority)
+  OrtTensorRTProviderOptionsV2 * tensorrt_options = nullptr;
+  Ort::ThrowOnError(Ort::GetApi().CreateTensorRTProviderOptions(&tensorrt_options));
+
+  // (Optional) customize TensorRT options
+  // Ort::ThrowOnError(Ort::GetApi().UpdateTensorRTProviderOptions(tensorrt_options, keys, values,
+  // num_keys));
+
+  Ort::ThrowOnError(Ort::GetApi().SessionOptionsAppendExecutionProvider_TensorRT_V2(
+    session_options_, tensorrt_options));
+
+  // Release the TensorRT options object
+  Ort::GetApi().ReleaseTensorRTProviderOptions(tensorrt_options);
+
+  // Add CUDA as a fallback if TensorRT cannot handle some ops
   session_options_.AppendExecutionProvider_CUDA(cuda_options_);
+
   session_options_.SetIntraOpNumThreads(1);
   session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
+
   session_ = Ort::Session(env_, model_path.c_str(), session_options_);
   RCLCPP_INFO(get_logger(), "Model loaded from %s", params_.model_path.c_str());
 }
@@ -292,6 +313,34 @@ void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
   }
 }
 
+Ort::Value create_cuda_tensor(
+  const std::vector<float> & data, const std::vector<int64_t> & shape, float ** device_ptr_out)
+{
+  float * device_ptr;
+  size_t bytes = data.size() * sizeof(float);
+
+  // Allocate memory on GPU
+  cudaError_t err = cudaMalloc(reinterpret_cast<void **>(&device_ptr), bytes);
+  if (err != cudaSuccess) {
+    throw std::runtime_error("cudaMalloc failed: " + std::string(cudaGetErrorString(err)));
+  }
+
+  // Copy data from CPU to GPU
+  err = cudaMemcpy(device_ptr, data.data(), bytes, cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) {
+    cudaFree(device_ptr);  // clean up
+    throw std::runtime_error("cudaMemcpy failed: " + std::string(cudaGetErrorString(err)));
+  }
+
+  // Save pointer so caller can free it later
+  *device_ptr_out = device_ptr;
+
+  // Create Ort tensor on GPU
+  Ort::MemoryInfo cuda_mem_info("Cuda", OrtDeviceAllocator, 0, OrtMemTypeDefault);
+  return Ort::Value::CreateTensor<float>(
+    cuda_mem_info, device_ptr, data.size(), shape.data(), shape.size());
+}
+
 std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
@@ -302,7 +351,7 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
   auto & lanes_speed_limit = input_data_map["lanes_speed_limit"];
   auto & route_lanes = input_data_map["route_lanes"];
 
-  // Allocate raw memory for bool array
+  // Prepare boolean mask on CPU
   size_t lane_speed_tensor_num_elements = std::accumulate(
     LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
   auto raw_speed_bool_array =
@@ -334,24 +383,81 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
     mem_info, route_lanes.data(), route_lanes.size(), ROUTE_LANES_SHAPE.data(),
     ROUTE_LANES_SHAPE.size());
 
-  Ort::Value input_tensors[] = {
-    std::move(ego_current_state_tensor), std::move(neighbor_agents_past_tensor),
-    std::move(static_objects_tensor),    std::move(lanes_tensor),
-    std::move(lanes_speed_limit_tensor), std::move(lane_has_speed_limit_tensor),
-    std::move(route_lanes_tensor)};
+  // Hold device memory to free later
+  std::vector<float *> gpu_buffers;
 
-  const char * input_names[] = {
-    "ego_current_state", "neighbor_agents_past",  "static_objects", "lanes",
-    "lanes_speed_limit", "lanes_has_speed_limit", "route_lanes"};
-
-  const char * output_names[] = {"output"};
-  // run inference
   try {
-    return session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
+    float *d_ego = nullptr, *d_neighbors = nullptr, *d_static = nullptr, *d_lanes = nullptr,
+          *d_lanes_speed = nullptr, *d_route = nullptr;
+
+    Ort::Value ego_current_state_tensor = create_cuda_tensor(
+      ego_current_state,
+      std::vector<int64_t>(EGO_CURRENT_STATE_SHAPE.begin(), EGO_CURRENT_STATE_SHAPE.end()), &d_ego);
+    gpu_buffers.push_back(d_ego);
+
+    Ort::Value neighbor_agents_past_tensor = create_cuda_tensor(
+      neighbor_agents_past, std::vector<int64_t>(NEIGHBOR_SHAPE.begin(), NEIGHBOR_SHAPE.end()),
+      &d_neighbors);
+    gpu_buffers.push_back(d_neighbors);
+
+    Ort::Value static_objects_tensor = create_cuda_tensor(
+      static_objects,
+      std::vector<int64_t>(STATIC_OBJECTS_SHAPE.begin(), STATIC_OBJECTS_SHAPE.end()), &d_static);
+    gpu_buffers.push_back(d_static);
+
+    Ort::Value lanes_tensor = create_cuda_tensor(
+      lanes, std::vector<int64_t>(LANES_SHAPE.begin(), LANES_SHAPE.end()), &d_lanes);
+    gpu_buffers.push_back(d_lanes);
+
+    Ort::Value lanes_speed_limit_tensor = create_cuda_tensor(
+      lanes_speed_limit,
+      std::vector<int64_t>(LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end()),
+      &d_lanes_speed);
+    gpu_buffers.push_back(d_lanes_speed);
+
+    Ort::Value route_lanes_tensor = create_cuda_tensor(
+      route_lanes, std::vector<int64_t>(ROUTE_LANES_SHAPE.begin(), ROUTE_LANES_SHAPE.end()),
+      &d_route);
+    gpu_buffers.push_back(d_route);
+
+    Ort::Value lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
+      mem_info_cpu, raw_speed_bool_array.get(), lane_speed_tensor_num_elements,
+      LANE_HAS_SPEED_LIMIT_SHAPE.data(), LANE_HAS_SPEED_LIMIT_SHAPE.size());
+
+    Ort::Value input_tensors[] = {
+      std::move(ego_current_state_tensor),    std::move(neighbor_agents_past_tensor),
+      std::move(static_objects_tensor),       std::move(lanes_tensor),
+      std::move(lanes_speed_limit_tensor),
+      std::move(lane_has_speed_limit_tensor),  // this one is still CPU
+      std::move(route_lanes_tensor)};
+
+    const char * input_names[] = {
+      "ego_current_state", "neighbor_agents_past",  "static_objects", "lanes",
+      "lanes_speed_limit", "lanes_has_speed_limit", "route_lanes"};
+
+    const char * output_names[] = {"output"};
+
+    // Run inference
+    auto output =
+      session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
+
+    // Cleanup GPU memory
+    for (auto ptr : gpu_buffers) {
+      cudaFree(ptr);
+    }
+
+    return output;
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
-    return std::nullopt;
+  } catch (const std::exception & e) {
+    std::cerr << "General error during CUDA inference: " << e.what() << std::endl;
   }
+
+  // Cleanup on failure
+  for (auto ptr : gpu_buffers) {
+    cudaFree(ptr);
+  }
+  return std::nullopt;
 }
 
 void DiffusionPlanner::on_timer()
