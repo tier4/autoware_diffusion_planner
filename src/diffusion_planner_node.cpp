@@ -293,6 +293,7 @@ void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
 
 std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
 {
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   auto & ego_current_state = input_data_map["ego_current_state"];
   auto & neighbor_agents_past = input_data_map["neighbor_agents_past"];
   auto & static_objects = input_data_map["static_objects"];
