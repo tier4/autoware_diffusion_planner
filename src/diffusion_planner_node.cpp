@@ -312,7 +312,6 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
   }
 
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::Allocator cuda_allocator(session_, mem_info);
   auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
     mem_info, ego_current_state.data(), ego_current_state.size(), EGO_CURRENT_STATE_SHAPE.data(),
     EGO_CURRENT_STATE_SHAPE.size());
