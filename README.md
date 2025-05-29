@@ -19,22 +19,25 @@ It is implemented as a ROS 2 component node, making it easy to integrate into Au
 ## Features
 
 - **Diffusion-based trajectory generation** for flexible and robust planning
+
+  [![Diffusion-Based trajectory generation](media/diffusion_planner.gif)](media/diffusion_planner.gif)
+
 - **Integration with Lanelet2 maps** for lane-level context
+
+  [![Lanelet Map Integration](media/lanelet_map_integration.png)](media/lanelet_map_integration.png)
+
 - **Dynamic and static obstacle handling** using perception inputs
+
+  [![Static Agent Reaction](media/diffusion_planner_reacts_to_bus.gif)](media/diffusion_planner_reacts_to_bus.gif)
+
+  [![Diffusion Planner](media/reaction_to_other_agents.gif)](media/reaction_to_other_agents.gif)
+
 - **Traffic signal and speed limit awareness**
+
+  [![Traffic Light Support](media/traffic_light_support.gif)](media/traffic_light_support.gif)
+
 - **ONNX Runtime** inference for fast neural network execution
 - **ROS 2 publishers** for planned trajectories, predicted objects, and debug markers
-
-### Demonstration Videos
-
-- **Agent Trajectory Prediction**
-  [![Agent Trajectory Prediction](media/agent_trajectory_prediction.mp4)](media/agent_trajectory_prediction.mp4)
-
-- **Diffusion Planner in Sample Map**
-  [![Diffusion Planner in Sample Map](media/diffusion_planner_in_sample_map.mp4)](media/diffusion_planner_in_sample_map.mp4)
-
-- **Reaction to Other Agents**
-  [![Reaction to Other Agents](media/reaction_to_other_agents.mp4)](media/reaction_to_other_agents.mp4)
 
 ---
 
