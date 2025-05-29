@@ -148,6 +148,27 @@ colcon test-result --all
 
 ---
 
+## ❗ Limitations
+
+While the Diffusion Planner shows promising capabilities, there are several limitations to be aware of:
+
+- **Route Termination**:
+  The route input to the model consists of a sequence of preferred lanelets from the current position to the goal region. However, **this route does not necessarily end exactly at the goal position**. As a result, the ego vehicle **may continue driving past the goal** instead of stopping at the target location.
+
+- **Training Dataset Domain Gap**:
+  The provided diffusion model checkpoint was trained on datasets using a **proprietary Lanelet2 map that is not publicly available**. Consequently, **performance may significantly degrade when running on other maps**, especially in environments with different topology or tagging conventions.
+
+- **Route Adherence & Lane Changing**:
+  The model sometimes **fails to strictly follow the preferred lanelet route**. If the ego vehicle leaves the preferred lane (e.g., to avoid an obstacle), it tends to **only return to the route during curves**. It **seldom performs deliberate lane changes** to merge back into the correct route on straight segments.
+
+- **Agent and Obstacle Avoidance**:
+  Although the planner **reacts to other agents and can perform avoidance maneuvers**, this behavior is **not fully reliable**. In some cases, **collisions with static or dynamic obstacles may still occur** due to ignored agents or insufficient context comprehension.
+
+- **Lack of Static Object Context**:
+  Static environment context such as **traffic cones, guard rails, or construction barriers** is **not currently provided to the model**. Instead, an **empty tensor** is passed in their place, which can lead to **limited understanding of occlusions or drivable boundaries**.
+
+---
+
 ## Development & Contribution
 
 - Follow the [Autoware coding guidelines](https://autowarefoundation.github.io/autoware-documentation/main/contributing/).
