@@ -233,8 +233,9 @@ InputDataMap DiffusionPlanner::create_input_data()
     constexpr double forward_path_length{200.0};
     lanelet::ConstLanelet current_preferred_lane;
 
-    if (!route_handler_->getClosestPreferredLaneletWithinRoute(
-          current_pose, &current_preferred_lane)) {
+    if (
+      !route_handler_->isHandlerReady() || !route_handler_->getClosestPreferredLaneletWithinRoute(
+                                             current_pose, &current_preferred_lane)) {
       RCLCPP_ERROR_STREAM_THROTTLE(
         get_logger(), *this->get_clock(), 5000, "failed to find closest lanelet within route!!!");
       return {};
