@@ -30,7 +30,6 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   <depend>lanelet2_core</depend>
-  <depend>lanelet2_extension</depend>
   <depend>lanelet2_routing</depend>
   <depend>lanelet2_traffic_rules</depend>
 
