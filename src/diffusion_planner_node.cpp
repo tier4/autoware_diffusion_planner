@@ -160,7 +160,7 @@ void DiffusionPlanner::load_model(const std::string & model_path)
   session_options_.AppendExecutionProvider_CUDA(cuda_options_);
 
   session_options_.SetIntraOpNumThreads(1);
-  session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
+  session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
 
   session_ = Ort::Session(env_, model_path.c_str(), session_options_);
   RCLCPP_INFO(get_logger(), "Model loaded from %s", params_.model_path.c_str());
@@ -361,26 +361,26 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
     raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
   }
 
-  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+  auto mem_info_cpu = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, ego_current_state.data(), ego_current_state.size(), EGO_CURRENT_STATE_SHAPE.data(),
-    EGO_CURRENT_STATE_SHAPE.size());
+    mem_info_cpu, ego_current_state.data(), ego_current_state.size(),
+    EGO_CURRENT_STATE_SHAPE.data(), EGO_CURRENT_STATE_SHAPE.size());
   auto neighbor_agents_past_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, neighbor_agents_past.data(), neighbor_agents_past.size(), NEIGHBOR_SHAPE.data(),
+    mem_info_cpu, neighbor_agents_past.data(), neighbor_agents_past.size(), NEIGHBOR_SHAPE.data(),
     NEIGHBOR_SHAPE.size());
   auto static_objects_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, static_objects.data(), static_objects.size(), STATIC_OBJECTS_SHAPE.data(),
+    mem_info_cpu, static_objects.data(), static_objects.size(), STATIC_OBJECTS_SHAPE.data(),
     STATIC_OBJECTS_SHAPE.size());
   auto lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes.data(), lanes.size(), LANES_SHAPE.data(), LANES_SHAPE.size());
+    mem_info_cpu, lanes.data(), lanes.size(), LANES_SHAPE.data(), LANES_SHAPE.size());
   auto lanes_speed_limit_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes_speed_limit.data(), lanes_speed_limit.size(), LANES_SPEED_LIMIT_SHAPE.data(),
-    LANES_SPEED_LIMIT_SHAPE.size());
+    mem_info_cpu, lanes_speed_limit.data(), lanes_speed_limit.size(),
+    LANES_SPEED_LIMIT_SHAPE.data(), LANES_SPEED_LIMIT_SHAPE.size());
   auto lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
-    mem_info, raw_speed_bool_array.get(), lane_speed_tensor_num_elements,
+    mem_info_cpu, raw_speed_bool_array.get(), lane_speed_tensor_num_elements,
     LANE_HAS_SPEED_LIMIT_SHAPE.data(), LANE_HAS_SPEED_LIMIT_SHAPE.size());
   auto route_lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, route_lanes.data(), route_lanes.size(), ROUTE_LANES_SHAPE.data(),
+    mem_info_cpu, route_lanes.data(), route_lanes.size(), ROUTE_LANES_SHAPE.data(),
     ROUTE_LANES_SHAPE.size());
 
   // Hold device memory to free later
