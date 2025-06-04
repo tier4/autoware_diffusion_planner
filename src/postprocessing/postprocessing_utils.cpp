@@ -177,7 +177,7 @@ Trajectory get_trajectory_from_prediction_matrix(
     TrajectoryPoint p;
     p.pose.position.x = prediction_matrix(row, 0);
     p.pose.position.y = prediction_matrix(row, 1);
-    p.pose.position.z = 0.0;
+    p.pose.position.z = ego_position.z();
     auto yaw = std::atan2(prediction_matrix(row, 3), prediction_matrix(row, 2));
     yaw = static_cast<float>(autoware_utils::normalize_radian(yaw));
     p.pose.orientation = autoware_utils::create_quaternion_from_yaw(yaw);
