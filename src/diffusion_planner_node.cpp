@@ -409,6 +409,84 @@ void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
   }
 }
 
+void DiffusionPlanner::do_inference_trt(InputDataMap & input_data_map)
+{
+  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
+  auto ego_current_state = input_data_map["ego_current_state"];
+  auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
+  auto static_objects = input_data_map["static_objects"];
+  auto lanes = input_data_map["lanes"];
+  auto lanes_speed_limit = input_data_map["lanes_speed_limit"];
+  auto route_lanes = input_data_map["route_lanes"];
+
+  // Allocate raw memory for bool array
+  size_t lane_speed_tensor_num_elements = std::accumulate(
+    LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
+  auto raw_speed_bool_array =
+    std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
+
+  for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
+    raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
+  }
+
+  cudaMemcpy(
+    ego_current_state_d_.get(), ego_current_state.data(), ego_current_state.size() * sizeof(float),
+    cudaMemcpyHostToDevice);
+  cudaMemcpy(
+    neighbor_agents_past_d_.get(), neighbor_agents_past.data(),
+    neighbor_agents_past.size() * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(
+    static_objects_d_.get(), static_objects.data(), static_objects.size() * sizeof(float),
+    cudaMemcpyHostToDevice);
+  cudaMemcpy(lanes_d_.get(), lanes.data(), lanes.size() * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(
+    lanes_speed_limit_d_.get(), lanes_speed_limit.data(), lanes_speed_limit.size() * sizeof(float),
+    cudaMemcpyHostToDevice);
+  cudaMemcpy(
+    route_lanes_d_.get(), route_lanes.data(), route_lanes.size() * sizeof(float),
+    cudaMemcpyHostToDevice);
+  cudaMemcpy(
+    lanes_has_speed_limit_d_.get(), raw_speed_bool_array.get(),
+    lane_speed_tensor_num_elements * sizeof(bool), cudaMemcpyHostToDevice);
+
+  network_trt_ptr_->setTensorAddress("ego_current_state", ego_current_state_d_.get());
+  network_trt_ptr_->setTensorAddress("neighbor_agents_past", neighbor_agents_past_d_.get());
+  network_trt_ptr_->setTensorAddress("static_objects", static_objects_d_.get());
+  network_trt_ptr_->setTensorAddress("lanes", lanes_d_.get());
+  network_trt_ptr_->setTensorAddress("lanes_speed_limit", lanes_speed_limit_d_.get());
+  network_trt_ptr_->setTensorAddress("route_lanes", route_lanes_d_.get());
+  network_trt_ptr_->setTensorAddress("lanes_has_speed_limit", lanes_has_speed_limit_d_.get());
+
+  // Output
+  network_trt_ptr_->setTensorAddress("output", output_d_.get());
+
+  auto status = network_trt_ptr_->enqueueV3(stream_);
+  CHECK_CUDA_ERROR(cudaStreamSynchronize(stream_));
+
+  if (!status) {
+    RCLCPP_ERROR(rclcpp::get_logger("diffusion_planner"), "Fail to enqueue and skip to detect.");
+  }
+
+  // Compute total number of elements in the output
+  size_t output_num_elements =
+    std::accumulate(OUTPUT_SHAPE.begin(), OUTPUT_SHAPE.end(), 1UL, std::multiplies<>());
+
+  // Allocate host vector
+  std::vector<float> output_host(output_num_elements);
+
+  // Copy data from device to host
+  cudaMemcpy(
+    output_host.data(),  // destination (host)
+    output_d_.get(),     // source (device)
+    output_num_elements * sizeof(float), cudaMemcpyDeviceToHost);
+
+  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+
+  auto output_tensor = Ort::Value::CreateTensor<float>(
+    mem_info, output_host.data(), output_host.size(), OUTPUT_SHAPE.data(), OUTPUT_SHAPE.size());
+  publish_predictions(output_tensor);
+}
+
 std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
@@ -463,71 +541,6 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
 
   const char * output_names[] = {"output"};
 
-  {
-    auto ego_current_state_temp = input_data_map["ego_current_state"];
-    auto neighbor_agents_past_temp = input_data_map["neighbor_agents_past"];
-    auto static_objects_temp = input_data_map["static_objects"];
-    auto lanes_temp = input_data_map["lanes"];
-    auto lanes_speed_limit_temp = input_data_map["lanes_speed_limit"];
-    auto route_lanes_temp = input_data_map["route_lanes"];
-
-    // Allocate raw memory for bool array
-    size_t lane_speed_tensor_num_elements = std::accumulate(
-      LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
-    auto raw_speed_bool_array_temp = std::shared_ptr<bool>(
-      new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
-
-    for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
-      raw_speed_bool_array_temp.get()[i] =
-        (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
-    }
-
-    cudaMemcpy(
-      ego_current_state_d_.get(), ego_current_state_temp.data(),
-      ego_current_state.size() * sizeof(float), cudaMemcpyHostToDevice);
-
-    cudaMemcpy(
-      neighbor_agents_past_d_.get(), neighbor_agents_past_temp.data(),
-      neighbor_agents_past.size() * sizeof(float), cudaMemcpyHostToDevice);
-
-    cudaMemcpy(
-      static_objects_d_.get(), static_objects_temp.data(), static_objects.size() * sizeof(float),
-      cudaMemcpyHostToDevice);
-
-    cudaMemcpy(
-      lanes_d_.get(), lanes_temp.data(), lanes.size() * sizeof(float), cudaMemcpyHostToDevice);
-
-    cudaMemcpy(
-      lanes_speed_limit_d_.get(), lanes_speed_limit_temp.data(),
-      lanes_speed_limit.size() * sizeof(float), cudaMemcpyHostToDevice);
-
-    cudaMemcpy(
-      route_lanes_d_.get(), route_lanes_temp.data(), route_lanes.size() * sizeof(float),
-      cudaMemcpyHostToDevice);
-
-    cudaMemcpy(
-      lanes_has_speed_limit_d_.get(), raw_speed_bool_array_temp.get(),
-      lane_speed_tensor_num_elements * sizeof(bool), cudaMemcpyHostToDevice);
-
-    network_trt_ptr_->setTensorAddress("ego_current_state", ego_current_state_d_.get());
-    network_trt_ptr_->setTensorAddress("neighbor_agents_past", neighbor_agents_past_d_.get());
-    network_trt_ptr_->setTensorAddress("static_objects", static_objects_d_.get());
-    network_trt_ptr_->setTensorAddress("lanes", lanes_d_.get());
-    network_trt_ptr_->setTensorAddress("lanes_speed_limit", lanes_speed_limit_d_.get());
-    network_trt_ptr_->setTensorAddress("route_lanes", route_lanes_d_.get());
-    network_trt_ptr_->setTensorAddress("lanes_has_speed_limit", lanes_has_speed_limit_d_.get());
-
-    // Output
-    network_trt_ptr_->setTensorAddress("output", output_d_.get());
-
-    auto status = network_trt_ptr_->enqueueV3(stream_);
-    CHECK_CUDA_ERROR(cudaStreamSynchronize(stream_));
-
-    if (!status) {
-      RCLCPP_ERROR(rclcpp::get_logger("diffusion_planner"), "Fail to enqueue and skip to detect.");
-    }
-  }
-
   // run inference
   try {
     return session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
@@ -562,13 +575,7 @@ void DiffusionPlanner::on_timer()
     RCLCPP_WARN(get_logger(), "Input data contains invalid values");
     return;
   }
-
-  auto output = do_inference(input_data_map);
-  if (!output) {
-    return;
-  }
-  auto & predictions = output.value()[0];
-  publish_predictions(predictions);
+  do_inference_trt(input_data_map);
 }
 
 void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)

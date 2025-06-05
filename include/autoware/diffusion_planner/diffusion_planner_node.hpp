@@ -224,6 +224,12 @@ public:
   std::optional<std::vector<Ort::Value>> do_inference(InputDataMap & input_data_map);
 
   /**
+   * @brief Run inference on input data output is stored on member output_d_.
+   * @param input_data_map Input data for the model.
+   */
+  void do_inference_trt(InputDataMap & input_data_map);
+
+  /**
    * @brief Callback for dynamic parameter updates.
    * @param parameters Updated parameters.
    * @return Result of parameter update.
