@@ -147,32 +147,62 @@ void DiffusionPlanner::load_model(const std::string & model_path)
   RCLCPP_INFO(get_logger(), "Model loaded from %s", params_.model_path.c_str());
 }
 
+// Helper to convert std::array<long, N> to nvinfer1::Dims
+
 void DiffusionPlanner::load_engine(
   const std::string & model_path, [[maybe_unused]] const std::string & engine_path)
 {
+  auto makeStaticDims = [](const std::string & name, const nvinfer1::Dims & dims) {
+    return autoware::tensorrt_common::ProfileDims{name, dims, dims, dims};
+  };
+
+  // Convert std::array to nvinfer1::Dims
+  auto toDims = [](auto const & arr) {
+    nvinfer1::Dims dims;
+    dims.nbDims = static_cast<int>(arr.size());
+    for (size_t i = 0; i < arr.size(); ++i) {
+      dims.d[i] = static_cast<int>(arr[i]);
+    }
+    return dims;
+  };
+  constexpr std::array<long, 4> OUTPUT_SHAPE = {1, 11, 80, 4};
+
   std::string precision = "fp32";  // Default precision
   auto trt_config = tensorrt_common::TrtCommonConfig(model_path, precision);
   trt_common_ = std::make_unique<TrtConvCalib>(trt_config);
 
   // const auto network_input_dims = trt_common_->getTensorShape(0);
 
-  auto profile_dims_ptr = std::make_unique<std::vector<autoware::tensorrt_common::ProfileDims>>();
+  std::vector<autoware::tensorrt_common::ProfileDims> profile_dims;
+
+  {
+    profile_dims.emplace_back(makeStaticDims("ego_current_state", toDims(EGO_CURRENT_STATE_SHAPE)));
+    profile_dims.emplace_back(makeStaticDims("neighbor_agents_past", toDims(NEIGHBOR_SHAPE)));
+    profile_dims.emplace_back(makeStaticDims("static_objects", toDims(STATIC_OBJECTS_SHAPE)));
+    profile_dims.emplace_back(makeStaticDims("lanes", toDims(LANES_SHAPE)));
+    profile_dims.emplace_back(makeStaticDims("lanes_speed_limit", toDims(LANES_SPEED_LIMIT_SHAPE)));
+    profile_dims.emplace_back(
+      makeStaticDims("lanes_has_speed_limit", toDims(LANE_HAS_SPEED_LIMIT_SHAPE)));
+    profile_dims.emplace_back(makeStaticDims("route_lanes", toDims(ROUTE_LANES_SHAPE)));
+  }
+
   std::vector<autoware::tensorrt_common::NetworkIO> network_io;
+  {  // Inputs
+    network_io.emplace_back("ego_current_state", toDims(EGO_CURRENT_STATE_SHAPE));
+    network_io.emplace_back("neighbor_agents_past", toDims(NEIGHBOR_SHAPE));
+    network_io.emplace_back("static_objects", toDims(STATIC_OBJECTS_SHAPE));
+    network_io.emplace_back("lanes", toDims(LANES_SHAPE));
+    network_io.emplace_back("lanes_speed_limit", toDims(LANES_SPEED_LIMIT_SHAPE));
+    network_io.emplace_back("lanes_has_speed_limit", toDims(LANE_HAS_SPEED_LIMIT_SHAPE));
+    network_io.emplace_back("route_lanes", toDims(ROUTE_LANES_SHAPE));
 
-  // Inputs
-  network_io.emplace_back("ego_current_state", nvinfer1::Dims{2, {1, 10}});
-  network_io.emplace_back("neighbor_agents_past", nvinfer1::Dims{4, {1, 32, 21, 11}});
-  network_io.emplace_back("static_objects", nvinfer1::Dims{3, {1, 5, 10}});
-  network_io.emplace_back("lanes", nvinfer1::Dims{4, {1, 70, 20, 12}});
-  network_io.emplace_back("lanes_speed_limit", nvinfer1::Dims{3, {1, 70, 1}});
-  network_io.emplace_back("lanes_has_speed_limit", nvinfer1::Dims{3, {1, 70, 1}});
-  network_io.emplace_back("route_lanes", nvinfer1::Dims{4, {1, 25, 20, 12}});
-
-  // Output
-  network_io.emplace_back("output", nvinfer1::Dims{4, {1, 11, 80, 4}});
-
+    // Output
+    network_io.emplace_back("output", toDims(OUTPUT_SHAPE));
+  }
   auto network_io_ptr =
     std::make_unique<std::vector<autoware::tensorrt_common::NetworkIO>>(network_io);
+  auto profile_dims_ptr =
+    std::make_unique<std::vector<autoware::tensorrt_common::ProfileDims>>(profile_dims);
 
   network_trt_ptr_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
     trt_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
@@ -181,16 +211,6 @@ void DiffusionPlanner::load_engine(
   if (!network_trt_ptr_->setup(std::move(profile_dims_ptr), std::move(network_io_ptr))) {
     throw std::runtime_error("Failed to setup TRT engine." + params_.plugins_path);
   }
-  // Create runtime
-  // IRuntime * runtime = createInferRuntime(gLogger);
-  // if (!runtime) throw std::runtime_error("Failed to create TRT runtime");
-
-  // // Load engine data from file
-  // std::vector<char> engineData = loadEngineFile(engineFile);
-
-  // // Deserialize engine
-  // ICudaEngine * engine = runtime->deserializeCudaEngine(engineData.data(), engineData.size());
-  // if (!engine) throw std::runtime_error("Failed to deserialize engine");
 }
 
 AgentData DiffusionPlanner::get_ego_centric_agent_data(
