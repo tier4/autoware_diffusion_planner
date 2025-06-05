@@ -68,6 +68,7 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   load_model(params_.model_path);
   init_pointers();
   load_engine(params_.model_path, params_.engine_path);
+  CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
 
   vehicle_info_ = autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo();
 
@@ -259,13 +260,6 @@ void DiffusionPlanner::load_engine(
   if (!set_input_shapes) {
     throw std::runtime_error("Failed to set input shapes for TensorRT engine.");
   }
-  // network_trt_ptr_->setTensorAddress("ego_current_state", ego_current_state_d_.get());
-  // network_trt_ptr_->setTensorAddress("neighbor_agents_past", neighbor_agents_past_d_.get());
-  // network_trt_ptr_->setTensorAddress("static_objects", static_objects_d_.get());
-  // network_trt_ptr_->setTensorAddress("lanes", lanes_d_.get());
-  // network_trt_ptr_->setTensorAddress("lanes_speed_limit", lanes_speed_limit_d_.get());
-  // network_trt_ptr_->setTensorAddress("lanes_has_speed_limit", lanes_has_speed_limit_d_.get());
-  // network_trt_ptr_->setTensorAddress("route_lanes", route_lanes_d_.get());
 }
 
 AgentData DiffusionPlanner::get_ego_centric_agent_data(
@@ -514,6 +508,24 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
     cudaMemcpy(
       lanes_has_speed_limit_d_.get(), raw_speed_bool_array_temp.get(),
       lane_speed_tensor_num_elements * sizeof(bool), cudaMemcpyHostToDevice);
+
+    network_trt_ptr_->setTensorAddress("ego_current_state", ego_current_state_d_.get());
+    network_trt_ptr_->setTensorAddress("neighbor_agents_past", neighbor_agents_past_d_.get());
+    network_trt_ptr_->setTensorAddress("static_objects", static_objects_d_.get());
+    network_trt_ptr_->setTensorAddress("lanes", lanes_d_.get());
+    network_trt_ptr_->setTensorAddress("lanes_speed_limit", lanes_speed_limit_d_.get());
+    network_trt_ptr_->setTensorAddress("route_lanes", route_lanes_d_.get());
+    network_trt_ptr_->setTensorAddress("lanes_has_speed_limit", lanes_has_speed_limit_d_.get());
+
+    // Output
+    network_trt_ptr_->setTensorAddress("output", output_d_.get());
+
+    auto status = network_trt_ptr_->enqueueV3(stream_);
+    CHECK_CUDA_ERROR(cudaStreamSynchronize(stream_));
+
+    if (!status) {
+      RCLCPP_ERROR(rclcpp::get_logger("diffusion_planner"), "Fail to enqueue and skip to detect.");
+    }
   }
 
   // run inference

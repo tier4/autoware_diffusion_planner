@@ -267,9 +267,8 @@ public:
   CudaUniquePtr<float[]> lanes_speed_limit_d_;
   CudaUniquePtr<float[]> route_lanes_d_;
   CudaUniquePtr<float[]> output_d_;  // shape: [1, 11, 80, 4]
-
-  // For boolean input
   CudaUniquePtr<bool[]> lanes_has_speed_limit_d_;
+  cudaStream_t stream_{nullptr};
 
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};
