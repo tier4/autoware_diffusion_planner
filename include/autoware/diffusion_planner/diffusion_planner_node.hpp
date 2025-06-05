@@ -23,6 +23,9 @@
 
 #include <Eigen/Dense>
 #include <autoware/route_handler/route_handler.hpp>
+#include <autoware/tensorrt_common/tensorrt_common.hpp>
+#include <autoware/tensorrt_common/tensorrt_conv_calib.hpp>
+#include <autoware/tensorrt_common/utils.hpp>
 #include <autoware/vehicle_info_utils/vehicle_info.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_utils/ros/polling_subscriber.hpp>
@@ -89,11 +92,21 @@ using unique_identifier_msgs::msg::UUID;
 using utils::NormalizationMap;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
+// TensorRT
+using autoware::tensorrt_common::CalibrationConfig;
+using autoware::tensorrt_common::NetworkIOPtr;
+using autoware::tensorrt_common::ProfileDimsPtr;
+using autoware::tensorrt_common::Profiler;
+using autoware::tensorrt_common::TrtCommon;
+using autoware::tensorrt_common::TrtCommonConfig;
+using autoware::tensorrt_common::TrtConvCalib;
 
 struct DiffusionPlannerParams
 {
   std::string model_path;
+  std::string engine_path;
   std::string args_path;
+  std::string plugins_path;
   double planning_frequency_hz;
   bool predict_neighbor_trajectory;
   bool update_traffic_light_group_info;
@@ -179,6 +192,12 @@ public:
   void load_model(const std::string & model_path);
 
   /**
+   * @brief Load TensorRT engine from file.
+   * @param model_path Path to the TensorRT engine file.
+   */
+  void load_engine(const std::string & model_path, const std::string & engine_path);
+
+  /**
    * @brief Publish visualization markers for debugging.
    * @param input_data_map Input data used for inference.
    */
@@ -229,6 +248,10 @@ public:
   Ort::SessionOptions session_options_;
   Ort::Session session_;
   Ort::AllocatorWithDefaultOptions allocator_;
+
+  // TensorRT
+  std::unique_ptr<TrtConvCalib> trt_common_;
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> network_trt_ptr_{nullptr};
 
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};
