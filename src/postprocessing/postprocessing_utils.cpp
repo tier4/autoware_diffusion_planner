@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <vector>
 
 namespace autoware::diffusion_planner::postprocessing
 {
@@ -54,6 +55,71 @@ void transform_output_matrix(
 };
 
 PredictedObjects create_predicted_objects(
+  std::vector<float> prediction, const AgentData & ego_centric_agent_data,
+  const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map)
+{
+  auto trajectory_path_to_pose_path =
+    [&](const Trajectory & trajectory) -> std::vector<geometry_msgs::msg::Pose> {
+    std::vector<geometry_msgs::msg::Pose> pose_path;
+    std::for_each(trajectory.points.begin(), trajectory.points.end(), [&](const auto & p) {
+      pose_path.push_back(p.pose);
+    });
+
+    return pose_path;
+  };
+
+  const auto objects_history = ego_centric_agent_data.get_histories();
+
+  PredictedObjects predicted_objects;
+  predicted_objects.header.stamp = stamp;
+  predicted_objects.header.frame_id = "map";
+
+  constexpr double time_step{0.1};
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+  constexpr auto agent_size = prediction_shape[1];
+
+  // get agent trajectories excluding ego (start from batch 0, and agent 1)
+  constexpr long start_batch = 0;
+  constexpr long start_agent = 1;
+
+  auto agent_trajectories =
+    create_multiple_trajectories(prediction, stamp, transform_ego_to_map, start_batch, start_agent);
+
+  // First prediction is of ego (agent 0). Predictions from index 1 to last are of the closest
+  // neighbors. ego_centric_agent_data contains neighbor history information ordered by distance.
+  for (long agent = 1; agent < agent_size; ++agent) {
+    if (static_cast<size_t>(agent) > objects_history.size()) {
+      break;
+    }
+    PredictedObject object;
+    const auto & object_info = objects_history.at(agent - 1).get_latest_state().tracked_object();
+    {  // Extract path from prediction
+      const auto & trajectory_points_in_map_reference = agent_trajectories.at(agent - 1);
+      PredictedPath predicted_path;
+      predicted_path.path = trajectory_path_to_pose_path(trajectory_points_in_map_reference);
+      predicted_path.time_step = rclcpp::Duration::from_seconds(time_step);
+      predicted_path.confidence = 1.0;
+      object.kinematics.predicted_paths.push_back(predicted_path);
+    }
+    {  // Copy kinematics
+      object.kinematics.initial_twist_with_covariance =
+        object_info.kinematics.twist_with_covariance;
+      object.kinematics.initial_acceleration_with_covariance =
+        object_info.kinematics.acceleration_with_covariance;
+      object.kinematics.initial_pose_with_covariance = object_info.kinematics.pose_with_covariance;
+    }
+    {  // Copy the remaining info
+      object.object_id = object_info.object_id;
+      object.classification = object_info.classification;
+      object.shape = object_info.shape;
+      object.existence_probability = object_info.existence_probability;
+    }
+    predicted_objects.objects.push_back(object);
+  }
+  return predicted_objects;
+}
+
+PredictedObjects create_predicted_objects(
   Ort::Value & prediction, const AgentData & ego_centric_agent_data, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map)
 {
@@ -74,8 +140,8 @@ PredictedObjects create_predicted_objects(
   predicted_objects.header.frame_id = "map";
 
   constexpr double time_step{0.1};
-  const auto prediction_shape = prediction.GetTensorTypeAndShapeInfo().GetShape();
-  auto agent_size = prediction_shape[1];
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+  constexpr auto agent_size = prediction_shape[1];
 
   // get agent trajectories excluding ego (start from batch 0, and agent 1)
   constexpr long start_batch = 0;
@@ -119,9 +185,26 @@ PredictedObjects create_predicted_objects(
 }
 
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor_data(
+  std::vector<float> & prediction)
+{
+  // copy relevant part of data to Eigen matrix
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+
+  auto batch_size = prediction_shape[0];
+  auto agent_size = prediction_shape[1];
+  auto rows = prediction_shape[2];
+  auto cols = prediction_shape[3];
+
+  Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data(
+    batch_size * agent_size * rows, cols);
+  std::memcpy(tensor_data.data(), prediction.data(), tensor_data.size() * sizeof(float));
+  return tensor_data;
+}
+
+Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor_data(
   Ort::Value & prediction)
 {
-  const auto prediction_shape = prediction.GetTensorTypeAndShapeInfo().GetShape();
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
 
   // copy relevant part of data to Eigen matrix
   auto batch_size = prediction_shape[0];
@@ -138,11 +221,35 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
 }
 
 Eigen::MatrixXf get_prediction_matrix(
+  std::vector<float> & prediction, const Eigen::Matrix4f & transform_ego_to_map, const long batch,
+  const long agent)
+{
+  // TODO(Daniel): add batch support
+  const auto prediction_shape = OUTPUT_SHAPE;
+
+  // copy relevant part of data to Eigen matrix
+  auto agent_size = prediction_shape[1];
+  auto rows = prediction_shape[2];
+  auto cols = prediction_shape[3];
+
+  Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data =
+    get_tensor_data(prediction);
+  Eigen::MatrixXf prediction_matrix =
+    tensor_data.block(batch * agent_size * rows + agent * rows, 0, rows, cols);
+
+  // Copy only the relevant part
+  prediction_matrix.transposeInPlace();
+  postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
+  postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+  return prediction_matrix.transpose();
+}
+
+Eigen::MatrixXf get_prediction_matrix(
   Ort::Value & prediction, const Eigen::Matrix4f & transform_ego_to_map, const long batch,
   const long agent)
 {
   // TODO(Daniel): add batch support
-  const auto prediction_shape = prediction.GetTensorTypeAndShapeInfo().GetShape();
+  const auto prediction_shape = OUTPUT_SHAPE;
 
   // copy relevant part of data to Eigen matrix
   auto agent_size = prediction_shape[1];
@@ -192,6 +299,16 @@ Trajectory get_trajectory_from_prediction_matrix(
 }
 
 Trajectory create_trajectory(
+  std::vector<float> & prediction, const rclcpp::Time & stamp,
+  const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent)
+{
+  // one batch of prediction
+  Eigen::MatrixXf prediction_matrix =
+    get_prediction_matrix(prediction, transform_ego_to_map, batch, agent);
+  return get_trajectory_from_prediction_matrix(prediction_matrix, transform_ego_to_map, stamp);
+}
+
+Trajectory create_trajectory(
   Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
   long batch, long agent)
 {
@@ -202,14 +319,45 @@ Trajectory create_trajectory(
 }
 
 std::vector<Trajectory> create_multiple_trajectories(
+  std::vector<float> & prediction, const rclcpp::Time & stamp,
+  const Eigen::Matrix4f & transform_ego_to_map, long start_batch, long start_agent)
+{
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+  constexpr auto batch_size = prediction_shape[0];
+  constexpr auto agent_size = prediction_shape[1];
+  constexpr auto rows = prediction_shape[2];
+  constexpr auto cols = prediction_shape[3];
+
+  std::vector<Trajectory> agent_trajectories;
+  Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data =
+    get_tensor_data(prediction);
+
+  for (long batch = start_batch; batch < batch_size; ++batch) {
+    for (long agent = start_agent; agent < agent_size; ++agent) {
+      // Copy only the relevant part
+      Eigen::MatrixXf prediction_matrix =
+        tensor_data.block(batch * agent_size * rows + agent * rows, 0, rows, cols);
+
+      prediction_matrix.transposeInPlace();
+      postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
+      postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+      prediction_matrix.transposeInPlace();
+      agent_trajectories.push_back(
+        get_trajectory_from_prediction_matrix(prediction_matrix, transform_ego_to_map, stamp));
+    }
+  }
+  return agent_trajectories;
+}
+
+std::vector<Trajectory> create_multiple_trajectories(
   Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
   long start_batch, long start_agent)
 {
-  const auto prediction_shape = prediction.GetTensorTypeAndShapeInfo().GetShape();
-  auto batch_size = prediction_shape[0];
-  auto agent_size = prediction_shape[1];
-  auto rows = prediction_shape[2];
-  auto cols = prediction_shape[3];
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+  constexpr auto batch_size = prediction_shape[0];
+  constexpr auto agent_size = prediction_shape[1];
+  constexpr auto rows = prediction_shape[2];
+  constexpr auto cols = prediction_shape[3];
 
   std::vector<Trajectory> agent_trajectories;
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data =
