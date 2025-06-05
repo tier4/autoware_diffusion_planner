@@ -211,6 +211,31 @@ void DiffusionPlanner::load_engine(
   if (!network_trt_ptr_->setup(std::move(profile_dims_ptr), std::move(network_io_ptr))) {
     throw std::runtime_error("Failed to setup TRT engine." + params_.plugins_path);
   }
+
+  // Set tensor addresses and input shapes
+  bool set_input_shapes = true;
+  set_input_shapes &=
+    network_trt_ptr_->setInputShape("ego_current_state", toDims(EGO_CURRENT_STATE_SHAPE));
+  set_input_shapes &=
+    network_trt_ptr_->setInputShape("neighbor_agents_past", toDims(NEIGHBOR_SHAPE));
+  set_input_shapes &=
+    network_trt_ptr_->setInputShape("static_objects", toDims(STATIC_OBJECTS_SHAPE));
+  set_input_shapes &= network_trt_ptr_->setInputShape("lanes", toDims(LANES_SHAPE));
+  set_input_shapes &=
+    network_trt_ptr_->setInputShape("lanes_speed_limit", toDims(LANES_SPEED_LIMIT_SHAPE));
+  set_input_shapes &=
+    network_trt_ptr_->setInputShape("lanes_has_speed_limit", toDims(LANE_HAS_SPEED_LIMIT_SHAPE));
+  set_input_shapes &= network_trt_ptr_->setInputShape("route_lanes", toDims(ROUTE_LANES_SHAPE));
+  if (!set_input_shapes) {
+    throw std::runtime_error("Failed to set input shapes for TensorRT engine.");
+  }
+  // network_trt_ptr_->setTensorAddress("ego_current_state", ego_current_state_d_.get());
+  // network_trt_ptr_->setTensorAddress("neighbor_agents_past", neighbor_agents_past_d_.get());
+  // network_trt_ptr_->setTensorAddress("static_objects", static_objects_d_.get());
+  // network_trt_ptr_->setTensorAddress("lanes", lanes_d_.get());
+  // network_trt_ptr_->setTensorAddress("lanes_speed_limit", lanes_speed_limit_d_.get());
+  // network_trt_ptr_->setTensorAddress("lanes_has_speed_limit", lanes_has_speed_limit_d_.get());
+  // network_trt_ptr_->setTensorAddress("route_lanes", route_lanes_d_.get());
 }
 
 AgentData DiffusionPlanner::get_ego_centric_agent_data(
