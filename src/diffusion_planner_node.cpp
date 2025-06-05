@@ -66,6 +66,7 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
 
   normalization_map_ = utils::load_normalization_stats(params_.args_path);
   load_model(params_.model_path);
+  init_pointers();
   load_engine(params_.model_path, params_.engine_path);
 
   vehicle_info_ = autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo();
@@ -136,6 +137,37 @@ SetParametersResult DiffusionPlanner::on_parameter(
   return result;
 }
 
+void DiffusionPlanner::init_pointers()
+{
+  const size_t ego_current_state_size = std::accumulate(
+    EGO_CURRENT_STATE_SHAPE.begin(), EGO_CURRENT_STATE_SHAPE.end(), 1L, std::multiplies<>());
+  const size_t neighbor_agents_past_size =
+    std::accumulate(NEIGHBOR_SHAPE.begin(), NEIGHBOR_SHAPE.end(), 1L, std::multiplies<>());
+  const size_t lanes_has_speed_limit_size = std::accumulate(
+    LANE_HAS_SPEED_LIMIT_SHAPE.begin(), LANE_HAS_SPEED_LIMIT_SHAPE.end(), 1L, std::multiplies<>());
+  const size_t static_objects_size = std::accumulate(
+    STATIC_OBJECTS_SHAPE.begin(), STATIC_OBJECTS_SHAPE.end(), 1L, std::multiplies<>());
+  const size_t lanes_size =
+    std::accumulate(LANES_SHAPE.begin(), LANES_SHAPE.end(), 1L, std::multiplies<>());
+  const size_t lanes_speed_limit_size = std::accumulate(
+    LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1L, std::multiplies<>());
+  const size_t route_lanes_size =
+    std::accumulate(ROUTE_LANES_SHAPE.begin(), ROUTE_LANES_SHAPE.end(), 1L, std::multiplies<>());
+  const size_t output_size =
+    std::accumulate(OUTPUT_SHAPE.begin(), OUTPUT_SHAPE.end(), 1L, std::multiplies<>());
+
+  ego_current_state_d_ = autoware::cuda_utils::make_unique<float[]>(ego_current_state_size);
+  neighbor_agents_past_d_ = autoware::cuda_utils::make_unique<float[]>(neighbor_agents_past_size);
+  lanes_has_speed_limit_d_ = autoware::cuda_utils::make_unique<bool[]>(lanes_has_speed_limit_size);
+  static_objects_d_ = autoware::cuda_utils::make_unique<float[]>(static_objects_size);
+  lanes_d_ = autoware::cuda_utils::make_unique<float[]>(lanes_size);
+  lanes_speed_limit_d_ = autoware::cuda_utils::make_unique<float[]>(lanes_speed_limit_size);
+  route_lanes_d_ = autoware::cuda_utils::make_unique<float[]>(route_lanes_size);
+
+  // Output
+  output_d_ = autoware::cuda_utils::make_unique<float[]>(output_size);
+}
+
 void DiffusionPlanner::load_model(const std::string & model_path)
 {
   env_ = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "DiffusionPlanner");
@@ -165,8 +197,6 @@ void DiffusionPlanner::load_engine(
     }
     return dims;
   };
-  constexpr std::array<long, 4> OUTPUT_SHAPE = {1, 11, 80, 4};
-
   std::string precision = "fp32";  // Default precision
   auto trt_config = tensorrt_common::TrtCommonConfig(model_path, precision);
   trt_common_ = std::make_unique<TrtConvCalib>(trt_config);
@@ -388,12 +418,12 @@ void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
 std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
-  auto & ego_current_state = input_data_map["ego_current_state"];
-  auto & neighbor_agents_past = input_data_map["neighbor_agents_past"];
-  auto & static_objects = input_data_map["static_objects"];
-  auto & lanes = input_data_map["lanes"];
-  auto & lanes_speed_limit = input_data_map["lanes_speed_limit"];
-  auto & route_lanes = input_data_map["route_lanes"];
+  auto ego_current_state = input_data_map["ego_current_state"];
+  auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
+  auto static_objects = input_data_map["static_objects"];
+  auto lanes = input_data_map["lanes"];
+  auto lanes_speed_limit = input_data_map["lanes_speed_limit"];
+  auto route_lanes = input_data_map["route_lanes"];
 
   // Allocate raw memory for bool array
   size_t lane_speed_tensor_num_elements = std::accumulate(
@@ -438,6 +468,54 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
     "lanes_speed_limit", "lanes_has_speed_limit", "route_lanes"};
 
   const char * output_names[] = {"output"};
+
+  {
+    auto ego_current_state_temp = input_data_map["ego_current_state"];
+    auto neighbor_agents_past_temp = input_data_map["neighbor_agents_past"];
+    auto static_objects_temp = input_data_map["static_objects"];
+    auto lanes_temp = input_data_map["lanes"];
+    auto lanes_speed_limit_temp = input_data_map["lanes_speed_limit"];
+    auto route_lanes_temp = input_data_map["route_lanes"];
+
+    // Allocate raw memory for bool array
+    size_t lane_speed_tensor_num_elements = std::accumulate(
+      LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
+    auto raw_speed_bool_array_temp = std::shared_ptr<bool>(
+      new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
+
+    for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
+      raw_speed_bool_array_temp.get()[i] =
+        (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
+    }
+
+    cudaMemcpy(
+      ego_current_state_d_.get(), ego_current_state_temp.data(),
+      ego_current_state.size() * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(
+      neighbor_agents_past_d_.get(), neighbor_agents_past_temp.data(),
+      neighbor_agents_past.size() * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(
+      static_objects_d_.get(), static_objects_temp.data(), static_objects.size() * sizeof(float),
+      cudaMemcpyHostToDevice);
+
+    cudaMemcpy(
+      lanes_d_.get(), lanes_temp.data(), lanes.size() * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(
+      lanes_speed_limit_d_.get(), lanes_speed_limit_temp.data(),
+      lanes_speed_limit.size() * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(
+      route_lanes_d_.get(), route_lanes_temp.data(), route_lanes.size() * sizeof(float),
+      cudaMemcpyHostToDevice);
+
+    cudaMemcpy(
+      lanes_has_speed_limit_d_.get(), raw_speed_bool_array_temp.get(),
+      lane_speed_tensor_num_elements * sizeof(bool), cudaMemcpyHostToDevice);
+  }
+
   // run inference
   try {
     return session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);

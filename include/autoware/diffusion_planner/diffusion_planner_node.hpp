@@ -22,6 +22,7 @@
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 
 #include <Eigen/Dense>
+#include <autoware/cuda_utils/cuda_unique_ptr.hpp>
 #include <autoware/route_handler/route_handler.hpp>
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
 #include <autoware/tensorrt_common/tensorrt_conv_calib.hpp>
@@ -93,6 +94,7 @@ using utils::NormalizationMap;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 // TensorRT
+using autoware::cuda_utils::CudaUniquePtr;
 using autoware::tensorrt_common::CalibrationConfig;
 using autoware::tensorrt_common::NetworkIOPtr;
 using autoware::tensorrt_common::ProfileDimsPtr;
@@ -186,6 +188,11 @@ public:
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
 
   /**
+   * @brief Init TensorRT pointers.
+   */
+  void init_pointers();
+
+  /**
    * @brief Load ONNX model from file.
    * @param model_path Path to the ONNX model file.
    */
@@ -252,6 +259,17 @@ public:
   // TensorRT
   std::unique_ptr<TrtConvCalib> trt_common_;
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> network_trt_ptr_{nullptr};
+  // For float inputs and output
+  CudaUniquePtr<float[]> ego_current_state_d_;
+  CudaUniquePtr<float[]> neighbor_agents_past_d_;
+  CudaUniquePtr<float[]> static_objects_d_;
+  CudaUniquePtr<float[]> lanes_d_;
+  CudaUniquePtr<float[]> lanes_speed_limit_d_;
+  CudaUniquePtr<float[]> route_lanes_d_;
+  CudaUniquePtr<float[]> output_d_;  // shape: [1, 11, 80, 4]
+
+  // For boolean input
+  CudaUniquePtr<bool[]> lanes_has_speed_limit_d_;
 
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};
