@@ -106,8 +106,8 @@ using autoware::tensorrt_common::TrtConvCalib;
 struct DiffusionPlannerParams
 {
   std::string model_path;
-  std::string engine_path;
   std::string args_path;
+  std::string backend;
   std::string plugins_path;
   double planning_frequency_hz;
   bool predict_neighbor_trajectory;
@@ -202,7 +202,7 @@ public:
    * @brief Load TensorRT engine from file.
    * @param model_path Path to the TensorRT engine file.
    */
-  void load_engine(const std::string & model_path, const std::string & engine_path);
+  void load_engine(const std::string & model_path);
 
   /**
    * @brief Publish visualization markers for debugging.
@@ -220,20 +220,20 @@ public:
    * @brief Publish model predictions.
    * @param predictions Output from the model.
    */
-  void publish_predictions(std::vector<float> & predictions) const;
+  void publish_predictions(const std::vector<float> & predictions) const;
 
   /**
    * @brief Run inference on input data and return predictions.
    * @param input_data_map Input data for the model.
    * @return Optional vector of ONNX model outputs.
    */
-  std::optional<std::vector<Ort::Value>> do_inference(InputDataMap & input_data_map);
+  std::vector<float> do_inference(InputDataMap & input_data_map);
 
   /**
    * @brief Run inference on input data output is stored on member output_d_.
    * @param input_data_map Input data for the model.
    */
-  void do_inference_trt(InputDataMap & input_data_map);
+  std::vector<float> do_inference_trt(InputDataMap & input_data_map);
 
   /**
    * @brief Callback for dynamic parameter updates.
@@ -253,10 +253,6 @@ public:
   std::pair<Eigen::Matrix4f, Eigen::Matrix4f> transforms_;
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
-
-  // postprocessing
-  Trajectory create_trajectory(
-    std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map);
 
   // current state
   Odometry ego_kinematic_state_;

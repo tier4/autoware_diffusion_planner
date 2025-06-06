@@ -55,7 +55,7 @@ void transform_output_matrix(
 };
 
 PredictedObjects create_predicted_objects(
-  std::vector<float> prediction, const AgentData & ego_centric_agent_data,
+  const std::vector<float> & prediction, const AgentData & ego_centric_agent_data,
   const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map)
 {
   auto trajectory_path_to_pose_path =
@@ -185,7 +185,7 @@ PredictedObjects create_predicted_objects(
 }
 
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor_data(
-  std::vector<float> & prediction)
+  const std::vector<float> & prediction)
 {
   // copy relevant part of data to Eigen matrix
   constexpr auto prediction_shape = OUTPUT_SHAPE;
@@ -221,8 +221,8 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
 }
 
 Eigen::MatrixXf get_prediction_matrix(
-  std::vector<float> & prediction, const Eigen::Matrix4f & transform_ego_to_map, const long batch,
-  const long agent)
+  const std::vector<float> & prediction, const Eigen::Matrix4f & transform_ego_to_map,
+  const long batch, const long agent)
 {
   // TODO(Daniel): add batch support
   const auto prediction_shape = OUTPUT_SHAPE;
@@ -299,7 +299,7 @@ Trajectory get_trajectory_from_prediction_matrix(
 }
 
 Trajectory create_trajectory(
-  std::vector<float> & prediction, const rclcpp::Time & stamp,
+  const std::vector<float> & prediction, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent)
 {
   // one batch of prediction
@@ -319,7 +319,7 @@ Trajectory create_trajectory(
 }
 
 std::vector<Trajectory> create_multiple_trajectories(
-  std::vector<float> & prediction, const rclcpp::Time & stamp,
+  const std::vector<float> & prediction, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map, long start_batch, long start_agent)
 {
   constexpr auto prediction_shape = OUTPUT_SHAPE;

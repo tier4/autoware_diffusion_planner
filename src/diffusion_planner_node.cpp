@@ -58,17 +58,18 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   time_keeper_ = std::make_shared<autoware_utils::TimeKeeper>(debug_processing_time_detail_pub_);
 
   set_up_params();
-  // Load the model
-  if (params_.model_path.empty()) {
-    RCLCPP_ERROR(get_logger(), "Model path is not set");
-    return;
-  }
-
   normalization_map_ = utils::load_normalization_stats(params_.args_path);
-  load_model(params_.model_path);
-  init_pointers();
-  load_engine(params_.model_path, params_.engine_path);
-  CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
+
+  if (params_.backend == "TENSORRT") {
+    init_pointers();
+    load_engine(params_.model_path);
+    CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
+  } else if (params_.backend == "ONNXRUNTIME") {
+    load_model(params_.model_path);
+  } else {
+    RCLCPP_ERROR(get_logger(), "Unsupported backend: %s", params_.backend.c_str());
+    std::exit(EXIT_FAILURE);
+  }
 
   vehicle_info_ = autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo();
 
@@ -90,6 +91,8 @@ void DiffusionPlanner::set_up_params()
   // node params
   params_.model_path = this->declare_parameter<std::string>("onnx_model_path", "");
   params_.args_path = this->declare_parameter<std::string>("args_path", "");
+  params_.backend = this->declare_parameter<std::string>("backend", "TENSORRT");
+  params_.plugins_path = this->declare_parameter<std::string>("plugins_path", "");
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
   params_.predict_neighbor_trajectory =
     this->declare_parameter<bool>("predict_neighbor_trajectory", false);
@@ -114,7 +117,6 @@ SetParametersResult DiffusionPlanner::on_parameter(
     DiffusionPlannerParams temp_params = params_;
     update_param<bool>(
       parameters, "predict_neighbor_trajectory", temp_params.predict_neighbor_trajectory);
-    params_ = temp_params;
     update_param<bool>(
       parameters, "update_traffic_light_group_info", temp_params.update_traffic_light_group_info);
     update_param<double>(
@@ -171,6 +173,10 @@ void DiffusionPlanner::init_pointers()
 
 void DiffusionPlanner::load_model(const std::string & model_path)
 {
+  if (model_path.empty()) {
+    RCLCPP_ERROR(get_logger(), "Model path is empty");
+    std::exit(EXIT_FAILURE);
+  }
   env_ = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "DiffusionPlanner");
   session_options_.SetLogSeverityLevel(1);
   session_options_.AppendExecutionProvider_CUDA(cuda_options_);
@@ -182,13 +188,8 @@ void DiffusionPlanner::load_model(const std::string & model_path)
 
 // Helper to convert std::array<long, N> to nvinfer1::Dims
 
-void DiffusionPlanner::load_engine(
-  const std::string & model_path, [[maybe_unused]] const std::string & engine_path)
+void DiffusionPlanner::load_engine(const std::string & model_path)
 {
-  auto makeStaticDims = [](const std::string & name, const nvinfer1::Dims & dims) {
-    return autoware::tensorrt_common::ProfileDims{name, dims, dims, dims};
-  };
-
   // Convert std::array to nvinfer1::Dims
   auto to_dims = [](auto const & arr) {
     nvinfer1::Dims dims;
@@ -198,6 +199,11 @@ void DiffusionPlanner::load_engine(
     }
     return dims;
   };
+
+  auto make_static_dims = [](const std::string & name, const nvinfer1::Dims & dims) {
+    return autoware::tensorrt_common::ProfileDims{name, dims, dims, dims};
+  };
+
   std::string precision = "fp32";  // Default precision
   auto trt_config = tensorrt_common::TrtCommonConfig(model_path, precision);
   trt_common_ = std::make_unique<TrtConvCalib>(trt_config);
@@ -206,15 +212,15 @@ void DiffusionPlanner::load_engine(
 
   {
     profile_dims.emplace_back(
-      makeStaticDims("ego_current_state", to_dims(EGO_CURRENT_STATE_SHAPE)));
-    profile_dims.emplace_back(makeStaticDims("neighbor_agents_past", to_dims(NEIGHBOR_SHAPE)));
-    profile_dims.emplace_back(makeStaticDims("static_objects", to_dims(STATIC_OBJECTS_SHAPE)));
-    profile_dims.emplace_back(makeStaticDims("lanes", to_dims(LANES_SHAPE)));
+      make_static_dims("ego_current_state", to_dims(EGO_CURRENT_STATE_SHAPE)));
+    profile_dims.emplace_back(make_static_dims("neighbor_agents_past", to_dims(NEIGHBOR_SHAPE)));
+    profile_dims.emplace_back(make_static_dims("static_objects", to_dims(STATIC_OBJECTS_SHAPE)));
+    profile_dims.emplace_back(make_static_dims("lanes", to_dims(LANES_SHAPE)));
     profile_dims.emplace_back(
-      makeStaticDims("lanes_speed_limit", to_dims(LANES_SPEED_LIMIT_SHAPE)));
+      make_static_dims("lanes_speed_limit", to_dims(LANES_SPEED_LIMIT_SHAPE)));
     profile_dims.emplace_back(
-      makeStaticDims("lanes_has_speed_limit", to_dims(LANE_HAS_SPEED_LIMIT_SHAPE)));
-    profile_dims.emplace_back(makeStaticDims("route_lanes", to_dims(ROUTE_LANES_SHAPE)));
+      make_static_dims("lanes_has_speed_limit", to_dims(LANE_HAS_SPEED_LIMIT_SHAPE)));
+    profile_dims.emplace_back(make_static_dims("route_lanes", to_dims(ROUTE_LANES_SHAPE)));
   }
 
   std::vector<autoware::tensorrt_common::NetworkIO> network_io;
@@ -243,7 +249,7 @@ void DiffusionPlanner::load_engine(
     throw std::runtime_error("Failed to setup TRT engine." + params_.plugins_path);
   }
 
-  // Set tensor addresses and input shapes
+  // Set tensor input shapes
   bool set_input_shapes = true;
   set_input_shapes &=
     network_trt_ptr_->setInputShape("ego_current_state", to_dims(EGO_CURRENT_STATE_SHAPE));
@@ -387,7 +393,7 @@ void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map) cons
   }
 }
 
-void DiffusionPlanner::publish_predictions(std::vector<float> & predictions) const
+void DiffusionPlanner::publish_predictions(const std::vector<float> & predictions) const
 {
   constexpr long batch_idx = 0;
   constexpr long ego_agent_idx = 0;
@@ -431,7 +437,7 @@ void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
   }
 }
 
-void DiffusionPlanner::do_inference_trt(InputDataMap & input_data_map)
+std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_map)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   auto ego_current_state = input_data_map["ego_current_state"];
@@ -501,19 +507,18 @@ void DiffusionPlanner::do_inference_trt(InputDataMap & input_data_map)
     output_host.data(),  // destination (host)
     output_d_.get(),     // source (device)
     output_num_elements * sizeof(float), cudaMemcpyDeviceToHost);
-
-  publish_predictions(output_host);
+  return output_host;
 }
 
-std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
+std::vector<float> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
-  auto ego_current_state = input_data_map["ego_current_state"];
-  auto neighbor_agents_past = input_data_map["neighbor_agents_past"];
-  auto static_objects = input_data_map["static_objects"];
-  auto lanes = input_data_map["lanes"];
-  auto lanes_speed_limit = input_data_map["lanes_speed_limit"];
-  auto route_lanes = input_data_map["route_lanes"];
+  auto & ego_current_state = input_data_map["ego_current_state"];
+  auto & neighbor_agents_past = input_data_map["neighbor_agents_past"];
+  auto & static_objects = input_data_map["static_objects"];
+  auto & lanes = input_data_map["lanes"];
+  auto & lanes_speed_limit = input_data_map["lanes_speed_limit"];
+  auto & route_lanes = input_data_map["route_lanes"];
 
   // Allocate raw memory for bool array
   size_t lane_speed_tensor_num_elements = std::accumulate(
@@ -561,10 +566,19 @@ std::optional<std::vector<Ort::Value>> DiffusionPlanner::do_inference(InputDataM
 
   // run inference
   try {
-    return session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
+    auto output_value =
+      session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
+
+    const size_t output_size =
+      std::accumulate(OUTPUT_SHAPE.begin(), OUTPUT_SHAPE.end(), 1L, std::multiplies<>());
+    std::vector<float> output(output_size);
+    std::memcpy(
+      output.data(), output_value[0].GetTensorMutableData<float>(), output_size * sizeof(float));
+
+    return output;
   } catch (const Ort::Exception & e) {
     std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
-    return std::nullopt;
+    return {};
   }
 }
 
@@ -593,7 +607,9 @@ void DiffusionPlanner::on_timer()
     RCLCPP_WARN(get_logger(), "Input data contains invalid values");
     return;
   }
-  do_inference_trt(input_data_map);
+  const auto predictions = (params_.backend == "TENSORRT") ? do_inference_trt(input_data_map)
+                                                           : do_inference(input_data_map);
+  publish_predictions(predictions);
 }
 
 void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)

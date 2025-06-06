@@ -17,9 +17,9 @@
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "onnxruntime_cxx_api.h"
-#include "rclcpp/rclcpp.hpp"
 
 #include <Eigen/Dense>
+#include <rclcpp/rclcpp.hpp>
 
 #include <autoware_new_planning_msgs/msg/trajectories.hpp>
 #include <autoware_perception_msgs/msg/detail/object_classification__struct.hpp>
@@ -71,7 +71,7 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
  * @return An Eigen matrix containing the tensor data in row-major order.
  */
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor_data(
-  std::vector<float> & prediction);
+  const std::vector<float> & prediction);
 
 /**
  * @brief Converts ONNX prediction output to a prediction matrix in map coordinates.
@@ -96,7 +96,7 @@ Eigen::MatrixXf get_prediction_matrix(
  * @return The prediction matrix for the specified batch and agent.
  */
 Eigen::MatrixXf get_prediction_matrix(
-  std::vector<float> & prediction, const Eigen::Matrix4f & transform_ego_to_map,
+  const std::vector<float> & prediction, const Eigen::Matrix4f & transform_ego_to_map,
   const long batch = 0, const long agent = 0);
 
 /**
@@ -122,7 +122,7 @@ PredictedObjects create_predicted_objects(
  * @return A PredictedObjects message containing predicted paths for each agent.
  */
 PredictedObjects create_predicted_objects(
-  std::vector<float> prediction, const AgentData & ego_centric_agent_data,
+  const std::vector<float> & prediction, const AgentData & ego_centric_agent_data,
   const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map);
 /**
  * @brief Converts a prediction matrix to a Trajectory message.
@@ -161,7 +161,7 @@ Trajectory create_trajectory(
  * @return A Trajectory message for the specified batch and agent.
  */
 Trajectory create_trajectory(
-  std::vector<float> & prediction, const rclcpp::Time & stamp,
+  const std::vector<float> & prediction, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent);
 
 /**
@@ -191,7 +191,7 @@ std::vector<Trajectory> create_multiple_trajectories(
  * @return A vector of Trajectory messages.
  */
 std::vector<Trajectory> create_multiple_trajectories(
-  std::vector<float> & prediction, const rclcpp::Time & stamp,
+  const std::vector<float> & prediction, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map, long start_batch, long start_agent);
 
 /**
