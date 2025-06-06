@@ -56,15 +56,6 @@ void transform_output_matrix(
   long row_idx, bool do_translation = true);
 
 /**
- * @brief Extracts tensor data from an ONNX prediction into an Eigen matrix.
- *
- * @param prediction The ONNX prediction output.
- * @return An Eigen matrix containing the tensor data in row-major order.
- */
-Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor_data(
-  Ort::Value & prediction);
-
-/**
  * @brief Extracts tensor data from tensor prediction into an Eigen matrix.
  *
  * @param prediction The tensor prediction output.
@@ -72,19 +63,6 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
  */
 Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor_data(
   const std::vector<float> & prediction);
-
-/**
- * @brief Converts ONNX prediction output to a prediction matrix in map coordinates.
- *
- * @param prediction The ONNX prediction output.
- * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
- * @param batch The batch index to extract.
- * @param agent The agent index to extract.
- * @return The prediction matrix for the specified batch and agent.
- */
-Eigen::MatrixXf get_prediction_matrix(
-  Ort::Value & prediction, const Eigen::Matrix4f & transform_ego_to_map, const long batch = 0,
-  const long agent = 0);
 
 /**
  * @brief Converts tensor prediction output to a prediction matrix in map coordinates.
@@ -98,19 +76,6 @@ Eigen::MatrixXf get_prediction_matrix(
 Eigen::MatrixXf get_prediction_matrix(
   const std::vector<float> & prediction, const Eigen::Matrix4f & transform_ego_to_map,
   const long batch = 0, const long agent = 0);
-
-/**
- * @brief Creates PredictedObjects message from ONNX prediction and agent data.
- *
- * @param prediction The ONNX prediction output.
- * @param ego_centric_agent_data The agent data in ego-centric coordinates.
- * @param stamp The ROS time stamp for the message.
- * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
- * @return A PredictedObjects message containing predicted paths for each agent.
- */
-PredictedObjects create_predicted_objects(
-  Ort::Value & prediction, const AgentData & ego_centric_agent_data, const rclcpp::Time & stamp,
-  const Eigen::Matrix4f & transform_ego_to_map);
 
 /**
  * @brief Creates PredictedObjects message from tensor prediction and agent data.
@@ -137,20 +102,6 @@ Trajectory get_trajectory_from_prediction_matrix(
   const rclcpp::Time & stamp);
 
 /**
- * @brief Creates a Trajectory message from ONNX prediction for a specific batch and agent.
- *
- * @param prediction The ONNX prediction output.
- * @param stamp The ROS time stamp for the message.
- * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
- * @param batch The batch index to extract.
- * @param agent The agent index to extract.
- * @return A Trajectory message for the specified batch and agent.
- */
-Trajectory create_trajectory(
-  Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
-  long batch, long agent);
-
-/**
  * @brief Creates a Trajectory message from tensor prediction for a specific batch and agent.
  *
  * @param prediction The tensor prediction output.
@@ -163,21 +114,6 @@ Trajectory create_trajectory(
 Trajectory create_trajectory(
   const std::vector<float> & prediction, const rclcpp::Time & stamp,
   const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent);
-
-/**
- * @brief Creates multiple Trajectory messages from ONNX prediction for a range of batches and
- * agents.
- *
- * @param prediction The ONNX prediction output.
- * @param stamp The ROS time stamp for the messages.
- * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
- * @param start_batch The starting batch index.
- * @param start_agent The starting agent index.
- * @return A vector of Trajectory messages.
- */
-std::vector<Trajectory> create_multiple_trajectories(
-  Ort::Value & prediction, const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map,
-  long start_batch, long start_agent);
 
 /**
  * @brief Creates multiple Trajectory messages from tensor prediction for a range of batches and

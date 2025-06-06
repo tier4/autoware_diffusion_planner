@@ -415,28 +415,6 @@ void DiffusionPlanner::publish_predictions(const std::vector<float> & prediction
   }
 }
 
-void DiffusionPlanner::publish_predictions(Ort::Value & predictions) const
-{
-  constexpr long batch_idx = 0;
-  constexpr long ego_agent_idx = 0;
-  auto output_trajectory = postprocessing::create_trajectory(
-    predictions, this->now(), transforms_.first, batch_idx, ego_agent_idx);
-  pub_trajectory_->publish(output_trajectory);
-
-  auto ego_trajectory_as_new_msg =
-    postprocessing::to_trajectories_msg(output_trajectory, generator_uuid_, "DiffusionPlanner");
-  pub_trajectories_->publish(ego_trajectory_as_new_msg);
-
-  // Other agents prediction
-  if (params_.predict_neighbor_trajectory && agent_data_.has_value()) {
-    auto reduced_agent_data = agent_data_.value();
-    reduced_agent_data.trim_to_k_closest_agents(ego_kinematic_state_.pose.pose.position);
-    auto predicted_objects = postprocessing::create_predicted_objects(
-      predictions, reduced_agent_data, this->now(), transforms_.first);
-    pub_objects_->publish(predicted_objects);
-  }
-}
-
 std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_map)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);

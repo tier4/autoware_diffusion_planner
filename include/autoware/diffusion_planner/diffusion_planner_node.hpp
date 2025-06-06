@@ -212,12 +212,6 @@ public:
 
   /**
    * @brief Publish model predictions.
-   * @param predictions Output from the ONNX model.
-   */
-  void publish_predictions(Ort::Value & predictions) const;
-
-  /**
-   * @brief Publish model predictions.
    * @param predictions Output from the model.
    */
   void publish_predictions(const std::vector<float> & predictions) const;
