@@ -22,7 +22,11 @@
 #include "autoware/diffusion_planner/utils/arg_reader.hpp"
 
 #include <Eigen/Dense>
+#include <autoware/cuda_utils/cuda_unique_ptr.hpp>
 #include <autoware/route_handler/route_handler.hpp>
+#include <autoware/tensorrt_common/tensorrt_common.hpp>
+#include <autoware/tensorrt_common/tensorrt_conv_calib.hpp>
+#include <autoware/tensorrt_common/utils.hpp>
 #include <autoware/vehicle_info_utils/vehicle_info.hpp>
 #include <autoware_lanelet2_extension/utility/message_conversion.hpp>
 #include <autoware_utils/ros/polling_subscriber.hpp>
@@ -89,11 +93,22 @@ using unique_identifier_msgs::msg::UUID;
 using utils::NormalizationMap;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
+// TensorRT
+using autoware::cuda_utils::CudaUniquePtr;
+using autoware::tensorrt_common::CalibrationConfig;
+using autoware::tensorrt_common::NetworkIOPtr;
+using autoware::tensorrt_common::ProfileDimsPtr;
+using autoware::tensorrt_common::Profiler;
+using autoware::tensorrt_common::TrtCommon;
+using autoware::tensorrt_common::TrtCommonConfig;
+using autoware::tensorrt_common::TrtConvCalib;
 
 struct DiffusionPlannerParams
 {
   std::string model_path;
   std::string args_path;
+  std::string backend;
+  std::string plugins_path;
   double planning_frequency_hz;
   bool predict_neighbor_trajectory;
   bool update_traffic_light_group_info;
@@ -173,10 +188,21 @@ public:
   void on_map(const HADMapBin::ConstSharedPtr map_msg);
 
   /**
+   * @brief Init TensorRT pointers.
+   */
+  void init_pointers();
+
+  /**
    * @brief Load ONNX model from file.
    * @param model_path Path to the ONNX model file.
    */
   void load_model(const std::string & model_path);
+
+  /**
+   * @brief Load TensorRT engine from file.
+   * @param model_path Path to the TensorRT engine file.
+   */
+  void load_engine(const std::string & model_path);
 
   /**
    * @brief Publish visualization markers for debugging.
@@ -186,16 +212,22 @@ public:
 
   /**
    * @brief Publish model predictions.
-   * @param predictions Output from the ONNX model.
+   * @param predictions Output from the model.
    */
-  void publish_predictions(Ort::Value & predictions) const;
+  void publish_predictions(const std::vector<float> & predictions) const;
 
   /**
    * @brief Run inference on input data and return predictions.
    * @param input_data_map Input data for the model.
    * @return Optional vector of ONNX model outputs.
    */
-  std::optional<std::vector<Ort::Value>> do_inference(InputDataMap & input_data_map);
+  std::vector<float> do_inference(InputDataMap & input_data_map);
+
+  /**
+   * @brief Run inference on input data output is stored on member output_d_.
+   * @param input_data_map Input data for the model.
+   */
+  std::vector<float> do_inference_trt(InputDataMap & input_data_map);
 
   /**
    * @brief Callback for dynamic parameter updates.
@@ -216,10 +248,6 @@ public:
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
 
-  // postprocessing
-  Trajectory create_trajectory(
-    std::vector<Ort::Value> & predictions, Eigen::Matrix4f & transform_ego_to_map);
-
   // current state
   Odometry ego_kinematic_state_;
 
@@ -229,6 +257,20 @@ public:
   Ort::SessionOptions session_options_;
   Ort::Session session_;
   Ort::AllocatorWithDefaultOptions allocator_;
+
+  // TensorRT
+  std::unique_ptr<TrtConvCalib> trt_common_;
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> network_trt_ptr_{nullptr};
+  // For float inputs and output
+  CudaUniquePtr<float[]> ego_current_state_d_;
+  CudaUniquePtr<float[]> neighbor_agents_past_d_;
+  CudaUniquePtr<float[]> static_objects_d_;
+  CudaUniquePtr<float[]> lanes_d_;
+  CudaUniquePtr<float[]> lanes_speed_limit_d_;
+  CudaUniquePtr<float[]> route_lanes_d_;
+  CudaUniquePtr<float[]> output_d_;  // shape: [1, 11, 80, 4]
+  CudaUniquePtr<bool[]> lanes_has_speed_limit_d_;
+  cudaStream_t stream_{nullptr};
 
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};

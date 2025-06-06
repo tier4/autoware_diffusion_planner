@@ -22,6 +22,7 @@
 #include <onnxruntime_cxx_api.h>
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 namespace autoware::diffusion_planner::test
@@ -65,10 +66,8 @@ TEST(PostprocessingUtilsTest, GetTensorDataCopiesData)
   std::vector<float> data{1, 2, 3, 4, 5, 6};
   std::vector<int64_t> shape{1, 1, 2, 3};
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::Value ort_value =
-    Ort::Value::CreateTensor<float>(mem_info, data.data(), data.size(), shape.data(), shape.size());
 
-  auto mat = postprocessing::get_tensor_data(ort_value);
+  auto mat = postprocessing::get_tensor_data(data);
   ASSERT_EQ(mat.rows(), 2);
   ASSERT_EQ(mat.cols(), 3);
   EXPECT_FLOAT_EQ(mat(0, 0), 1.0f);
@@ -85,14 +84,12 @@ TEST(PostprocessingUtilsTest, GetPredictionMatrixTransformsCorrectly)
 
   std::vector<int64_t> shape{1, 1, rows, cols};
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::Value ort_value =
-    Ort::Value::CreateTensor<float>(mem_info, data.data(), data.size(), shape.data(), shape.size());
 
   Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
   transform(0, 3) = 1.0f;
   transform(1, 3) = 2.0f;
 
-  auto mat = postprocessing::get_prediction_matrix(ort_value, transform, 0, 0);
+  auto mat = postprocessing::get_prediction_matrix(data, transform, 0, 0);
   ASSERT_EQ(mat.rows(), rows);
   ASSERT_EQ(mat.cols(), cols);
   // Optionally, check a few values to ensure transformation occurred
@@ -125,15 +122,13 @@ TEST(PostprocessingUtilsTest, CreateTrajectoryAndMultipleTrajectories)
 
   std::vector<int64_t> shape{batch, agent, rows, cols};
   auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::Value ort_value =
-    Ort::Value::CreateTensor<float>(mem_info, data.data(), data.size(), shape.data(), shape.size());
   Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
   rclcpp::Time stamp(123, 0);
 
-  auto traj = postprocessing::create_trajectory(ort_value, stamp, transform, 0, 0);
+  auto traj = postprocessing::create_trajectory(data, stamp, transform, 0, 0);
   ASSERT_EQ(traj.points.size(), rows);
 
-  auto trajs = postprocessing::create_multiple_trajectories(ort_value, stamp, transform, 0, 0);
+  auto trajs = postprocessing::create_multiple_trajectories(data, stamp, transform, 0, 0);
   ASSERT_EQ(trajs.size(), agent);
 }
 

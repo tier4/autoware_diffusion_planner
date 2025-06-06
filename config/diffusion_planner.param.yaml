@@ -2,6 +2,8 @@
   ros__parameters:
     onnx_model_path: ""
     args_path: ""
+    backend: "TENSORRT" # Options: "TENSORRT", "ONNXRUNTIME"
+    plugins_path: $(find-pkg-share autoware_tensorrt_plugins)/plugins/libautoware_tensorrt_plugins.so
     planning_frequency_hz: 10.0
     predict_neighbor_trajectory: true
     update_traffic_light_group_info: true
