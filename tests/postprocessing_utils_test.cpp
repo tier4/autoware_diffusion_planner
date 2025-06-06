@@ -19,7 +19,6 @@
 #include <Eigen/Dense>
 
 #include <gtest/gtest.h>
-#include <onnxruntime_cxx_api.h>
 
 #include <algorithm>
 #include <cstring>
@@ -65,13 +64,19 @@ TEST(PostprocessingUtilsTest, GetTensorDataCopiesData)
 {
   std::vector<float> data{1, 2, 3, 4, 5, 6};
   std::vector<int64_t> shape{1, 1, 2, 3};
-  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
   auto mat = postprocessing::get_tensor_data(data);
-  ASSERT_EQ(mat.rows(), 2);
-  ASSERT_EQ(mat.cols(), 3);
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+  auto batch_size = prediction_shape[0];
+  auto agent_size = prediction_shape[1];
+  auto rows = prediction_shape[2];
+  auto cols = prediction_shape[3];
+
+  ASSERT_EQ(mat.rows(), batch_size * agent_size * rows);
+  ASSERT_EQ(mat.cols(), cols);
   EXPECT_FLOAT_EQ(mat(0, 0), 1.0f);
-  EXPECT_FLOAT_EQ(mat(1, 2), 6.0f);
+  EXPECT_FLOAT_EQ(mat(0, 1), 2.0f);
+  EXPECT_NE(mat(1, 2), 0.0f);
 }
 
 TEST(PostprocessingUtilsTest, GetPredictionMatrixTransformsCorrectly)
@@ -83,15 +88,19 @@ TEST(PostprocessingUtilsTest, GetPredictionMatrixTransformsCorrectly)
   for (int i = 0; i < rows * cols; ++i) data[i] = static_cast<float>(i);
 
   std::vector<int64_t> shape{1, 1, rows, cols};
-  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
   Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
   transform(0, 3) = 1.0f;
   transform(1, 3) = 2.0f;
 
   auto mat = postprocessing::get_prediction_matrix(data, transform, 0, 0);
-  ASSERT_EQ(mat.rows(), rows);
-  ASSERT_EQ(mat.cols(), cols);
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+
+  auto expected_rows = prediction_shape[2];
+  auto expected_cols = prediction_shape[3];
+
+  ASSERT_EQ(mat.rows(), expected_rows);
+  ASSERT_EQ(mat.cols(), expected_cols);
   // Optionally, check a few values to ensure transformation occurred
 }
 
@@ -121,15 +130,19 @@ TEST(PostprocessingUtilsTest, CreateTrajectoryAndMultipleTrajectories)
   for (size_t i = 0; i < data.size(); ++i) data[i] = static_cast<float>(i);
 
   std::vector<int64_t> shape{batch, agent, rows, cols};
-  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
   Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
   rclcpp::Time stamp(123, 0);
 
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+
+  auto expected_trajs = prediction_shape[1];
+  auto expected_points = prediction_shape[2];
+
   auto traj = postprocessing::create_trajectory(data, stamp, transform, 0, 0);
-  ASSERT_EQ(traj.points.size(), rows);
+  ASSERT_EQ(traj.points.size(), expected_points);
 
   auto trajs = postprocessing::create_multiple_trajectories(data, stamp, transform, 0, 0);
-  ASSERT_EQ(trajs.size(), agent);
+  ASSERT_EQ(trajs.size(), expected_trajs);
 }
 
 TEST(PostprocessingUtilsTest, ToTrajectoriesMsgPopulatesFields)

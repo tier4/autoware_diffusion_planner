@@ -132,6 +132,7 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
 
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data(
     batch_size * agent_size * rows, cols);
+  tensor_data.setZero();
   std::memcpy(tensor_data.data(), prediction.data(), tensor_data.size() * sizeof(float));
   return tensor_data;
 }
