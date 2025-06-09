@@ -476,7 +476,7 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   CHECK_CUDA_ERROR(cudaStreamSynchronize(stream_));
 
   if (!status) {
-    RCLCPP_ERROR(rclcpp::get_logger("diffusion_planner"), "Fail to enqueue and skip to detect.");
+    RCLCPP_ERROR(rclcpp::get_logger("diffusion_planner"), "Failed to enqueue and do inference.");
   }
 
   // Compute total number of elements in the output
