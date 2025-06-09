@@ -95,12 +95,6 @@ using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 // TensorRT
 using autoware::cuda_utils::CudaUniquePtr;
-using autoware::tensorrt_common::CalibrationConfig;
-using autoware::tensorrt_common::NetworkIOPtr;
-using autoware::tensorrt_common::ProfileDimsPtr;
-using autoware::tensorrt_common::Profiler;
-using autoware::tensorrt_common::TrtCommon;
-using autoware::tensorrt_common::TrtCommonConfig;
 using autoware::tensorrt_common::TrtConvCalib;
 
 struct DiffusionPlannerParams
@@ -200,8 +194,10 @@ public:
   void load_model(const std::string & model_path);
 
   /**
-   * @brief Load TensorRT engine from file.
-   * @param model_path Path to the TensorRT engine file.
+   * @brief Load the TensorRT engine from the specified model path.
+   * This function sets up the TensorRT engine with the required input and output shapes.
+   * It also initializes the TrtConvCalib for calibration if needed.
+   * @param model_path Path to the TensorRT model file.
    */
   void load_engine(const std::string & model_path);
 
