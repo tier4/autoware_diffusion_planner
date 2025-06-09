@@ -109,6 +109,7 @@ struct DiffusionPlannerParams
   std::string args_path;
   std::string backend;
   std::string plugins_path;
+  bool build_only;
   double planning_frequency_hz;
   bool predict_neighbor_trajectory;
   bool update_traffic_light_group_info;

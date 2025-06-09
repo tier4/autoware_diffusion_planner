@@ -71,6 +71,11 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
     std::exit(EXIT_FAILURE);
   }
 
+  if (params_.build_only) {
+    RCLCPP_INFO(get_logger(), "Build only mode enabled. Exiting after loading model.");
+    std::exit(EXIT_SUCCESS);
+  }
+
   vehicle_info_ = autoware::vehicle_info_utils::VehicleInfoUtils(*this).getVehicleInfo();
 
   timer_ = rclcpp::create_timer(
@@ -93,6 +98,7 @@ void DiffusionPlanner::set_up_params()
   params_.args_path = this->declare_parameter<std::string>("args_path", "");
   params_.backend = this->declare_parameter<std::string>("backend", "TENSORRT");
   params_.plugins_path = this->declare_parameter<std::string>("plugins_path", "");
+  params_.build_only = this->declare_parameter<bool>("build_only", false);
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
   params_.predict_neighbor_trajectory =
     this->declare_parameter<bool>("predict_neighbor_trajectory", false);
