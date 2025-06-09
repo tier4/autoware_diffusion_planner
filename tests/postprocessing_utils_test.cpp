@@ -36,7 +36,7 @@ TEST(PostprocessingUtilsTest, TransformOutputMatrixTranslation)
   transform(0, 3) = 2.0f;
   transform(1, 3) = -3.0f;
 
-  postprocessing::transform_output_matrix(transform, output_matrix, 0, 0, true);
+  postprocess::transform_output_matrix(transform, output_matrix, 0, 0, true);
 
   for (int i = 0; i < 5; ++i) {
     EXPECT_FLOAT_EQ(output_matrix(0, i), 3.0f);   // 1 + 2
@@ -52,7 +52,7 @@ TEST(PostprocessingUtilsTest, TransformOutputMatrixNoTranslation)
   transform(0, 3) = 2.0f;
   transform(1, 3) = -3.0f;
 
-  postprocessing::transform_output_matrix(transform, output_matrix, 0, 2, false);
+  postprocess::transform_output_matrix(transform, output_matrix, 0, 2, false);
 
   for (int i = 0; i < 5; ++i) {
     EXPECT_FLOAT_EQ(output_matrix(2, i), 1.0f);
@@ -65,7 +65,7 @@ TEST(PostprocessingUtilsTest, GetTensorDataCopiesData)
   std::vector<float> data{1, 2, 3, 4, 5, 6};
   std::vector<int64_t> shape{1, 1, 2, 3};
 
-  auto mat = postprocessing::get_tensor_data(data);
+  auto mat = postprocess::get_tensor_data(data);
   constexpr auto prediction_shape = OUTPUT_SHAPE;
   auto batch_size = prediction_shape[0];
   auto agent_size = prediction_shape[1];
@@ -93,7 +93,7 @@ TEST(PostprocessingUtilsTest, GetPredictionMatrixTransformsCorrectly)
   transform(0, 3) = 1.0f;
   transform(1, 3) = 2.0f;
 
-  auto mat = postprocessing::get_prediction_matrix(data, transform, 0, 0);
+  auto mat = postprocess::get_prediction_matrix(data, transform, 0, 0);
   constexpr auto prediction_shape = OUTPUT_SHAPE;
 
   auto expected_rows = prediction_shape[2];
@@ -112,7 +112,7 @@ TEST(PostprocessingUtilsTest, GetTrajectoryFromPredictionMatrixWorks)
   rclcpp::Time stamp(123, 0);
 
   auto traj =
-    postprocessing::get_trajectory_from_prediction_matrix(prediction_matrix, transform, stamp);
+    postprocess::get_trajectory_from_prediction_matrix(prediction_matrix, transform, stamp);
   ASSERT_EQ(traj.points.size(), 3);
   EXPECT_FLOAT_EQ(traj.points[0].pose.position.x, 0.0f);
   EXPECT_FLOAT_EQ(traj.points[1].pose.position.x, 1.0f);
@@ -138,10 +138,10 @@ TEST(PostprocessingUtilsTest, CreateTrajectoryAndMultipleTrajectories)
   auto expected_trajs = prediction_shape[1];
   auto expected_points = prediction_shape[2];
 
-  auto traj = postprocessing::create_trajectory(data, stamp, transform, 0, 0);
+  auto traj = postprocess::create_trajectory(data, stamp, transform, 0, 0);
   ASSERT_EQ(traj.points.size(), expected_points);
 
-  auto trajs = postprocessing::create_multiple_trajectories(data, stamp, transform, 0, 0);
+  auto trajs = postprocess::create_multiple_trajectories(data, stamp, transform, 0, 0);
   ASSERT_EQ(trajs.size(), expected_trajs);
 }
 
@@ -154,7 +154,7 @@ TEST(PostprocessingUtilsTest, ToTrajectoriesMsgPopulatesFields)
   UUID uuid;
   std::fill(uuid.uuid.begin(), uuid.uuid.end(), 42);
 
-  auto msg = postprocessing::to_trajectories_msg(traj, uuid, "test_generator");
+  auto msg = postprocess::to_trajectories_msg(traj, uuid, "test_generator");
   ASSERT_EQ(msg.trajectories.size(), 1);
   ASSERT_EQ(msg.generator_info.size(), 1);
   EXPECT_EQ(msg.trajectories[0].header.frame_id, "map");

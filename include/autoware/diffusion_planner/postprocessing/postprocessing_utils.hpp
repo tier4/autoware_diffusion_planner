@@ -33,7 +33,7 @@
 #include <string>
 #include <vector>
 
-namespace autoware::diffusion_planner::postprocessing
+namespace autoware::diffusion_planner::postprocess
 {
 using autoware_new_planning_msgs::msg::Trajectories;
 using autoware_perception_msgs::msg::ObjectClassification;
@@ -141,5 +141,5 @@ std::vector<Trajectory> create_multiple_trajectories(
 Trajectories to_trajectories_msg(
   const Trajectory & trajectory, const UUID & generator_uuid, const std::string & generator_name);
 
-}  // namespace autoware::diffusion_planner::postprocessing
+}  // namespace autoware::diffusion_planner::postprocess
 #endif  // AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP
