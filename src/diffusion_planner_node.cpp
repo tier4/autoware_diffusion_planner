@@ -41,6 +41,11 @@
 
 namespace autoware::diffusion_planner
 {
+using autoware::tensorrt_common::NetworkIO;
+using autoware::tensorrt_common::ProfileDims;
+using autoware::tensorrt_common::Profiler;
+using autoware::tensorrt_common::TrtCommon;
+
 DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
 : Node("diffusion_planner", options),
   session_(nullptr),
@@ -112,7 +117,6 @@ void DiffusionPlanner::set_up_params()
     this->declare_parameter<bool>("debug_params.publish_debug_map", false);
   debug_params_.publish_debug_route =
     this->declare_parameter<bool>("debug_params.publish_debug_route", false);
-  RCLCPP_INFO(get_logger(), "Setting up parameters for Diffusion Planner");
 }
 
 SetParametersResult DiffusionPlanner::on_parameter(
@@ -192,8 +196,6 @@ void DiffusionPlanner::load_model(const std::string & model_path)
   RCLCPP_INFO(get_logger(), "Model loaded from %s", params_.model_path.c_str());
 }
 
-// Helper to convert std::array<long, N> to nvinfer1::Dims
-
 void DiffusionPlanner::load_engine(const std::string & model_path)
 {
   // Convert std::array to nvinfer1::Dims
@@ -207,14 +209,14 @@ void DiffusionPlanner::load_engine(const std::string & model_path)
   };
 
   auto make_static_dims = [](const std::string & name, const nvinfer1::Dims & dims) {
-    return autoware::tensorrt_common::ProfileDims{name, dims, dims, dims};
+    return ProfileDims{name, dims, dims, dims};
   };
 
   std::string precision = "fp32";  // Default precision
   auto trt_config = tensorrt_common::TrtCommonConfig(model_path, precision);
   trt_common_ = std::make_unique<TrtConvCalib>(trt_config);
 
-  std::vector<autoware::tensorrt_common::ProfileDims> profile_dims;
+  std::vector<ProfileDims> profile_dims;
 
   {
     profile_dims.emplace_back(
@@ -242,14 +244,11 @@ void DiffusionPlanner::load_engine(const std::string & model_path)
     // Output
     network_io.emplace_back("output", to_dims(OUTPUT_SHAPE));
   }
-  auto network_io_ptr =
-    std::make_unique<std::vector<autoware::tensorrt_common::NetworkIO>>(network_io);
-  auto profile_dims_ptr =
-    std::make_unique<std::vector<autoware::tensorrt_common::ProfileDims>>(profile_dims);
+  auto network_io_ptr = std::make_unique<std::vector<NetworkIO>>(network_io);
+  auto profile_dims_ptr = std::make_unique<std::vector<ProfileDims>>(profile_dims);
 
-  network_trt_ptr_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-    trt_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
-    std::vector<std::string>{params_.plugins_path});
+  network_trt_ptr_ = std::make_unique<TrtCommon>(
+    trt_config, std::make_shared<Profiler>(), std::vector<std::string>{params_.plugins_path});
 
   if (!network_trt_ptr_->setup(std::move(profile_dims_ptr), std::move(network_io_ptr))) {
     throw std::runtime_error("Failed to setup TRT engine." + params_.plugins_path);
@@ -302,7 +301,9 @@ InputDataMap DiffusionPlanner::create_input_data()
   route_ptr_ = (!route_ptr_ || temp_route_ptr) ? temp_route_ptr : route_ptr_;
 
   if (!objects || !ego_kinematic_state || !ego_acceleration || !route_ptr_) {
-    RCLCPP_WARN(get_logger(), "No tracked objects or ego kinematic state or route data received");
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *this->get_clock(), 5000,
+      "No tracked objects or ego kinematic state or route data received");
     return {};
   }
 
@@ -572,14 +573,15 @@ void DiffusionPlanner::on_timer()
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   if (!is_map_loaded_) {
-    RCLCPP_INFO(get_logger(), "Waiting for map data...");
+    RCLCPP_INFO_THROTTLE(get_logger(), *this->get_clock(), 5000, "Waiting for map data...");
     return;
   }
 
   // Prepare input data for the model
   auto input_data_map = create_input_data();
   if (input_data_map.empty()) {
-    RCLCPP_WARN(get_logger(), "No input data available for inference");
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *this->get_clock(), 5000, "No input data available for inference");
     return;
   }
 
@@ -588,7 +590,8 @@ void DiffusionPlanner::on_timer()
   // normalization of data
   preprocess::normalize_input_data(input_data_map, normalization_map_);
   if (!utils::check_input_map(input_data_map)) {
-    RCLCPP_WARN(get_logger(), "Input data contains invalid values");
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *this->get_clock(), 5000, "Input data contains invalid values");
     return;
   }
   const auto predictions = (params_.backend == "TENSORRT") ? do_inference_trt(input_data_map)
@@ -606,7 +609,7 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
   lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments(POINTS_PER_SEGMENT);
 
   if (lane_segments_.empty()) {
-    RCLCPP_WARN(get_logger(), "No lane segments found in the map");
+    RCLCPP_ERROR(get_logger(), "No lane segments found in the map");
     throw std::runtime_error("No lane segments found in the map");
   }
 
