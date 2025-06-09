@@ -401,13 +401,13 @@ void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map) cons
   }
 }
 
-void DiffusionPlanner::publish_predictions(const std::vector<float> & predictions) const
+void DiffusionPlanner::publish_predictions(const std::vector<float> & predictions)
 {
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
   constexpr long batch_idx = 0;
   constexpr long ego_agent_idx = 0;
   auto output_trajectory = postprocessing::create_trajectory(
-    predictions, this->now(), transforms_.first, prev_prediction_matrix_, batch_idx, ego_agent_idx);
+    predictions, prev_prediction_matrix_, this->now(), transforms_.first, batch_idx, ego_agent_idx);
   postprocessing::add_current_ego_state(ego_kinematic_state_, output_trajectory);
   pub_trajectory_->publish(output_trajectory);
 

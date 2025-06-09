@@ -192,8 +192,8 @@ Trajectory get_trajectory_from_prediction_matrix(
 }
 
 Trajectory create_trajectory(
-  const std::vector<float> & prediction, const rclcpp::Time & stamp,
-  const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent)
+  const std::vector<float> & prediction, std::optional<Eigen::MatrixXf> & prev_prediction_matrix,
+  const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent)
 {
   constexpr float alpha = 0.2f;
   // one batch of prediction

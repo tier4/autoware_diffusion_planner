@@ -108,6 +108,7 @@ Trajectory get_trajectory_from_prediction_matrix(
  * @brief Creates a Trajectory message from tensor prediction for a specific batch and agent.
  *
  * @param prediction The tensor prediction output.
+ * @param prev_prediction_matrix Matrix representation of the previous prediction.
  * @param stamp The ROS time stamp for the message.
  * @param transform_ego_to_map The transformation matrix from ego to map coordinates.
  * @param batch The batch index to extract.
@@ -115,8 +116,8 @@ Trajectory get_trajectory_from_prediction_matrix(
  * @return A Trajectory message for the specified batch and agent.
  */
 Trajectory create_trajectory(
-  const std::vector<float> & prediction, const rclcpp::Time & stamp,
-  const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent);
+  const std::vector<float> & prediction, std::optional<Eigen::MatrixXf> & prev_prediction_matrix,
+  const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map, long batch, long agent);
 
 /**
  * @brief Creates multiple Trajectory messages from tensor prediction for a range of batches and

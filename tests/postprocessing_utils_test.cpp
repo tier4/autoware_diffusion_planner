@@ -137,8 +137,10 @@ TEST(PostprocessingUtilsTest, CreateTrajectoryAndMultipleTrajectories)
 
   auto expected_trajs = prediction_shape[1];
   auto expected_points = prediction_shape[2];
+  std::optional<Eigen::MatrixXf> prev_prediction_matrix = std::nullopt;
 
-  auto traj = postprocessing::create_trajectory(data, stamp, transform, 0, 0);
+  auto traj =
+    postprocessing::create_trajectory(data, prev_prediction_matrix, stamp, transform, 0, 0);
   ASSERT_EQ(traj.points.size(), expected_points);
 
   auto trajs = postprocessing::create_multiple_trajectories(data, stamp, transform, 0, 0);

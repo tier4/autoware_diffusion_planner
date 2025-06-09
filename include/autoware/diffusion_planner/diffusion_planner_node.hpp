@@ -215,7 +215,7 @@ public:
    * @brief Publish model predictions.
    * @param predictions Output from the model.
    */
-  void publish_predictions(const std::vector<float> & predictions) const;
+  void publish_predictions(const std::vector<float> & predictions);
 
   /**
    * @brief Run inference on input data and return predictions.
@@ -275,6 +275,9 @@ public:
 
   // Model input data
   std::optional<AgentData> agent_data_{std::nullopt};
+
+  // Postprocessing
+  std::optional<Eigen::MatrixXf> prev_prediction_matrix_{std::nullopt};
 
   // Node parameters
   OnSetParametersCallbackHandle::SharedPtr set_param_res_;
