@@ -33,7 +33,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace autoware::diffusion_planner::postprocessing
+namespace autoware::diffusion_planner::postprocess
 {
 using autoware_perception_msgs::msg::PredictedObject;
 using autoware_planning_msgs::msg::TrajectoryPoint;
@@ -156,8 +156,8 @@ Eigen::MatrixXf get_prediction_matrix(
 
   // Copy only the relevant part
   prediction_matrix.transposeInPlace();
-  postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
-  postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+  postprocess::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
+  postprocess::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
   return prediction_matrix.transpose();
 }
 
@@ -222,8 +222,8 @@ std::vector<Trajectory> create_multiple_trajectories(
         tensor_data.block(batch * agent_size * rows + agent * rows, 0, rows, cols);
 
       prediction_matrix.transposeInPlace();
-      postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
-      postprocessing::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+      postprocess::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
+      postprocess::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
       prediction_matrix.transposeInPlace();
       agent_trajectories.push_back(
         get_trajectory_from_prediction_matrix(prediction_matrix, transform_ego_to_map, stamp));
@@ -257,4 +257,4 @@ Trajectories to_trajectories_msg(
   return output;
 }
 
-}  // namespace autoware::diffusion_planner::postprocessing
+}  // namespace autoware::diffusion_planner::postprocess
