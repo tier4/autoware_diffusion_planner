@@ -107,6 +107,7 @@ struct DiffusionPlannerParams
   double planning_frequency_hz;
   bool predict_neighbor_trajectory;
   bool update_traffic_light_group_info;
+  bool keep_last_traffic_light_group_info;
   double traffic_light_group_msg_timeout_seconds;
 };
 struct DiffusionPlannerDebugParams
@@ -283,6 +284,7 @@ public:
   std::shared_ptr<lanelet::LaneletMap> lanelet_map_ptr_;
   std::shared_ptr<lanelet::routing::RoutingGraph> routing_graph_ptr_;
   std::shared_ptr<lanelet::traffic_rules::TrafficRules> traffic_rules_ptr_;
+  std::map<lanelet::Id, TrafficSignalStamped> traffic_light_id_map_;
   std::unique_ptr<LaneletConverter> lanelet_converter_ptr_;
   std::vector<LaneSegment> lane_segments_;
   Eigen::MatrixXf map_lane_segments_matrix_;
