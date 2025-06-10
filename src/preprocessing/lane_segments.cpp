@@ -30,7 +30,8 @@ namespace autoware::diffusion_planner::preprocess
 {
 void compute_distances(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
-  std::vector<ColWithDistance> & distances, float center_x, float center_y, float mask_range)
+  std::vector<ColWithDistance> & distances, const float center_x, const float center_y,
+  const float mask_range)
 {
   const auto cols = input_matrix.cols();
   if (cols % POINTS_PER_SEGMENT != 0) {
@@ -86,7 +87,7 @@ void transform_selected_rows(
 
 void add_traffic_light_one_hot_encoding_to_segment(
   [[maybe_unused]] Eigen::MatrixXf & segment_matrix, const ColLaneIDMaps & col_id_mapping,
-  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const long row_idx,
   [[maybe_unused]] const long col_counter)
 {
@@ -145,7 +146,7 @@ Eigen::RowVector4f get_traffic_signal_row_vector(
 std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   const std::vector<ColWithDistance> & distances, const ColLaneIDMaps & col_id_mapping,
-  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, long m)
 {
   if (input_matrix.rows() != FULL_MATRIX_ROWS || input_matrix.cols() % POINTS_PER_SEGMENT != 0) {
@@ -210,9 +211,9 @@ void apply_transforms(
 std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_and_select_rows(
   const Eigen::MatrixXf & input_matrix, const Eigen::Matrix4f & transform_matrix,
   const ColLaneIDMaps & col_id_mapping,
-  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
-  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, float center_x, float center_y,
-  const long m)
+  const std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const float center_x,
+  const float center_y, const long m)
 {
   if (input_matrix.rows() != FULL_MATRIX_ROWS || m <= 0) {
     throw std::invalid_argument(
@@ -342,7 +343,7 @@ std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_s
 std::vector<float> get_route_segments(
   const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & transform_matrix,
   const ColLaneIDMaps & col_id_mapping,
-  std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
+  const std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr,
   lanelet::ConstLanelets & current_lanes)
 {

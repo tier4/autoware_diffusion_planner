@@ -19,7 +19,8 @@ namespace autoware::diffusion_planner::preprocess
 void process_traffic_signals(
   const autoware_perception_msgs::msg::TrafficLightGroupArray::ConstSharedPtr msg,
   std::map<lanelet::Id, TrafficSignalStamped> & traffic_signal_id_map,
-  const rclcpp::Time & current_time, const double time_threshold_seconds)
+  const rclcpp::Time & current_time, const double time_threshold_seconds,
+  const bool keep_last_observation)
 {
   // clear previous observation
   if (!msg) {
@@ -34,18 +35,29 @@ void process_traffic_signals(
     // Discard outdated message
     return;
   }
+  const auto traffic_light_id_map_last_observed_old = traffic_signal_id_map;
+  traffic_signal_id_map.clear();
 
   for (const auto & signal : msg->traffic_light_groups) {
     TrafficSignalStamped traffic_signal;
     traffic_signal.stamp = msg->stamp;
     traffic_signal.signal = signal;
     traffic_signal_id_map[signal.traffic_light_group_id] = traffic_signal;
+    if (!keep_last_observation) {
+      continue;
+    }
 
-    // TODO (Daniel): implement fallback for unknown signals
-    // const bool is_unknown_observation =
-    //   std::any_of(signal.elements.begin(), signal.elements.end(), [](const auto & element) {
-    //     return element.color == autoware_perception_msgs::msg::TrafficLightElement::UNKNOWN;
-    //   });
+    const bool is_unknown_observation =
+      std::any_of(signal.elements.begin(), signal.elements.end(), [](const auto & element) {
+        return element.color == autoware_perception_msgs::msg::TrafficLightElement::UNKNOWN;
+      });
+    const auto old_data =
+      traffic_light_id_map_last_observed_old.find(signal.traffic_light_group_id);
+
+    if (is_unknown_observation && old_data != traffic_light_id_map_last_observed_old.end()) {
+      traffic_signal_id_map[signal.traffic_light_group_id] = old_data->second;
+      traffic_signal_id_map[signal.traffic_light_group_id].stamp = msg->stamp;
+    }
   }
 }
 

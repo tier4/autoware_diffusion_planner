@@ -109,6 +109,8 @@ void DiffusionPlanner::set_up_params()
     this->declare_parameter<bool>("predict_neighbor_trajectory", false);
   params_.update_traffic_light_group_info =
     this->declare_parameter<bool>("update_traffic_light_group_info", false);
+  params_.keep_last_traffic_light_group_info =
+    this->declare_parameter<bool>("keep_last_traffic_light_group_info", false);
   params_.traffic_light_group_msg_timeout_seconds =
     this->declare_parameter<double>("traffic_light_group_msg_timeout_seconds", 0.2);
 
@@ -129,6 +131,9 @@ SetParametersResult DiffusionPlanner::on_parameter(
       parameters, "predict_neighbor_trajectory", temp_params.predict_neighbor_trajectory);
     update_param<bool>(
       parameters, "update_traffic_light_group_info", temp_params.update_traffic_light_group_info);
+    update_param<bool>(
+      parameters, "keep_last_traffic_light_group_info",
+      temp_params.keep_last_traffic_light_group_info);
     update_param<double>(
       parameters, "traffic_light_group_msg_timeout_seconds",
       temp_params.traffic_light_group_msg_timeout_seconds);
@@ -308,11 +313,11 @@ InputDataMap DiffusionPlanner::create_input_data()
   }
 
   route_handler_->setRoute(*route_ptr_);
-  std::map<lanelet::Id, TrafficSignalStamped> traffic_light_id_map;
   if (params_.update_traffic_light_group_info) {
     const auto & traffic_light_msg_timeout_s = params_.traffic_light_group_msg_timeout_seconds;
     preprocess::process_traffic_signals(
-      traffic_signals, traffic_light_id_map, this->now(), traffic_light_msg_timeout_s);
+      traffic_signals, traffic_light_id_map_, this->now(), traffic_light_msg_timeout_s,
+      params_.keep_last_traffic_light_group_info);
     if (!traffic_signals) {
       RCLCPP_WARN_THROTTLE(
         this->get_logger(), *this->get_clock(), 5000,
@@ -348,7 +353,7 @@ InputDataMap DiffusionPlanner::create_input_data()
   {
     std::tuple<Eigen::MatrixXf, ColLaneIDMaps> matrix_mapping_tuple =
       preprocess::transform_and_select_rows(
-        map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
+        map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map_,
         lanelet_map_ptr_, center_x, center_y, LANES_SHAPE[1]);
     const Eigen::MatrixXf & ego_centric_lane_segments = std::get<0>(matrix_mapping_tuple);
     input_data_map["lanes"] = preprocess::extract_lane_tensor_data(ego_centric_lane_segments);
@@ -374,7 +379,7 @@ InputDataMap DiffusionPlanner::create_input_data()
       current_preferred_lane, backward_path_length, forward_path_length);
 
     input_data_map["route_lanes"] = preprocess::get_route_segments(
-      map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map,
+      map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map_,
       lanelet_map_ptr_, current_lanes);
   }
   return input_data_map;
