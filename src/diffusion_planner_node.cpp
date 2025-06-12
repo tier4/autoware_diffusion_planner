@@ -406,17 +406,18 @@ void DiffusionPlanner::publish_debug_markers(InputDataMap & input_data_map) cons
   if (debug_params_.publish_debug_route) {
     auto lifetime = rclcpp::Duration::from_seconds(0.2);
     auto route_markers = utils::create_lane_marker(
-      input_data_map["route_lanes"],
+      transforms_.first, input_data_map["route_lanes"],
       std::vector<long>(ROUTE_LANES_SHAPE.begin(), ROUTE_LANES_SHAPE.end()), this->now(), lifetime,
-      {0.8, 0.8, 0.8, 0.8}, "base_link", true);
+      {0.8, 0.8, 0.8, 0.8}, "map", true);
     pub_route_marker_->publish(route_markers);
   }
 
   if (debug_params_.publish_debug_map) {
     auto lifetime = rclcpp::Duration::from_seconds(0.2);
     auto lane_markers = utils::create_lane_marker(
-      input_data_map["lanes"], std::vector<long>(LANES_SHAPE.begin(), LANES_SHAPE.end()),
-      this->now(), lifetime, {0.1, 0.1, 0.7, 0.8}, "base_link", true);
+      transforms_.first, input_data_map["lanes"],
+      std::vector<long>(LANES_SHAPE.begin(), LANES_SHAPE.end()), this->now(), lifetime,
+      {0.1, 0.1, 0.7, 0.8}, "map", true);
     pub_lane_marker_->publish(lane_markers);
   }
 }
