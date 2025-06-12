@@ -279,7 +279,7 @@ struct AgentData
    */
   explicit AgentData(
     const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t max_num_agent = 32,
-    const size_t num_timestamps = 21);
+    const size_t num_timestamps = 21, const bool ignore_unknown_agents = false);
 
   void apply_transform(const Eigen::Matrix4f & transform)
   {
@@ -292,7 +292,11 @@ struct AgentData
   // fill data array
   void fill_data(const std::vector<AgentHistory> & histories, bool pad_with_zeroes = true);
 
-  void update_histories(const autoware_perception_msgs::msg::TrackedObjects & objects);
+  void update_histories(
+    const autoware_perception_msgs::msg::TrackedObjects & objects,
+    const bool ignore_unknown_agents = false);
+
+  static bool is_unknown_object(const autoware_perception_msgs::msg::TrackedObject & object);
 
   void trim_to_k_closest_agents();
   void trim_to_k_closest_agents(const geometry_msgs::msg::Point & position);

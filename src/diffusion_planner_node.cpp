@@ -27,6 +27,8 @@
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logging.hpp>
 
+#include <autoware_perception_msgs/msg/tracked_objects.hpp>
+
 #include <Eigen/src/Core/Matrix.h>
 
 #include <cmath>
@@ -34,6 +36,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -105,6 +108,9 @@ void DiffusionPlanner::set_up_params()
   params_.plugins_path = this->declare_parameter<std::string>("plugins_path", "");
   params_.build_only = this->declare_parameter<bool>("build_only", false);
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
+  params_.ignore_neighbors = this->declare_parameter<bool>("ignore_neighbors", false);
+  params_.ignore_unknown_neighbors =
+    this->declare_parameter<bool>("ignore_unknown_neighbors", false);
   params_.predict_neighbor_trajectory =
     this->declare_parameter<bool>("predict_neighbor_trajectory", false);
   params_.update_traffic_light_group_info =
@@ -127,6 +133,9 @@ SetParametersResult DiffusionPlanner::on_parameter(
   using autoware_utils::update_param;
   {
     DiffusionPlannerParams temp_params = params_;
+    update_param<bool>(
+      parameters, "ignore_unknown_neighbors", temp_params.ignore_unknown_neighbors);
+    update_param<bool>(parameters, "ignore_neighbors", temp_params.ignore_neighbors);
     update_param<bool>(
       parameters, "predict_neighbor_trajectory", temp_params.predict_neighbor_trajectory);
     update_param<bool>(
@@ -282,9 +291,10 @@ AgentData DiffusionPlanner::get_ego_centric_agent_data(
   const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform)
 {
   if (!agent_data_) {
-    agent_data_ = AgentData(objects, NEIGHBOR_SHAPE[1], NEIGHBOR_SHAPE[2]);
+    agent_data_ =
+      AgentData(objects, NEIGHBOR_SHAPE[1], NEIGHBOR_SHAPE[2], params_.ignore_unknown_neighbors);
   } else {
-    agent_data_->update_histories(objects);
+    agent_data_->update_histories(objects, params_.ignore_unknown_neighbors);
   }
 
   auto ego_centric_agent_data = agent_data_.value();
@@ -304,6 +314,12 @@ InputDataMap DiffusionPlanner::create_input_data()
   auto temp_route_ptr = route_subscriber_.take_data();
 
   route_ptr_ = (!route_ptr_ || temp_route_ptr) ? temp_route_ptr : route_ptr_;
+
+  TrackedObjects empty_object_list;
+
+  if (params_.ignore_neighbors) {
+    objects = std::make_shared<TrackedObjects>(empty_object_list);
+  };
 
   if (!objects || !ego_kinematic_state || !ego_acceleration || !route_ptr_) {
     RCLCPP_WARN_THROTTLE(

@@ -6,6 +6,8 @@
     plugins_path: $(find-pkg-share autoware_tensorrt_plugins)/plugins/libautoware_tensorrt_plugins.so
     build_only: false
     planning_frequency_hz: 10.0
+    ignore_neighbors: false
+    ignore_unknown_neighbors: true
     predict_neighbor_trajectory: true
     update_traffic_light_group_info: true
     keep_last_traffic_light_group_info: true

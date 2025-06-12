@@ -195,11 +195,14 @@ void AgentHistory::pad_history(bool pad_front)
 
 AgentData::AgentData(
   const autoware_perception_msgs::msg::TrackedObjects & objects, const size_t max_num_agent,
-  const size_t num_timestamps)
+  const size_t num_timestamps, const bool ignore_unknown_agents)
 : max_num_agent_(max_num_agent), time_length_(num_timestamps)
 {
   std::vector<AgentHistory> histories;
   for (auto object : objects.objects) {
+    if (ignore_unknown_agents && is_unknown_object(object)) {
+      continue;
+    }
     auto agent_state = AgentState(object);
     auto current_time = static_cast<double>(objects.header.stamp.sec) +
                         static_cast<double>(objects.header.stamp.nanosec) * 1e-9;
@@ -207,6 +210,13 @@ AgentData::AgentData(
       agent_state, get_model_label(object), current_time, num_timestamps, true);
   }
   fill_data(histories);
+}
+
+bool AgentData::is_unknown_object(const autoware_perception_msgs::msg::TrackedObject & object)
+{
+  const auto autoware_label =
+    autoware::object_recognition_utils::getHighestProbLabel(object.classification);
+  return autoware_label == autoware_perception_msgs::msg::ObjectClassification::UNKNOWN;
 }
 
 void AgentData::fill_data(const std::vector<AgentHistory> & histories, bool pad_with_zeroes)
@@ -229,12 +239,16 @@ void AgentData::fill_data(const std::vector<AgentHistory> & histories, bool pad_
   }
 }
 
-void AgentData::update_histories(const autoware_perception_msgs::msg::TrackedObjects & objects)
+void AgentData::update_histories(
+  const autoware_perception_msgs::msg::TrackedObjects & objects, const bool ignore_unknown_agents)
 {
   auto current_time = static_cast<double>(objects.header.stamp.sec) +
                       static_cast<double>(objects.header.stamp.nanosec) * 1e-9;
   std::vector<std::string> found_ids;
   for (auto object : objects.objects) {
+    if (ignore_unknown_agents && is_unknown_object(object)) {
+      continue;
+    }
     auto object_id = autoware_utils_uuid::to_hex_string(object.object_id);
     auto it = histories_idx_map_.find(object_id);
     if (it != histories_idx_map_.end()) {
