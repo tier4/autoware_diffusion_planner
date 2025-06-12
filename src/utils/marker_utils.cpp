@@ -51,9 +51,10 @@ ColorRGBA get_traffic_light_color(float g, float y, float r, const ColorRGBA & o
 };
 
 MarkerArray create_lane_marker(
-  const std::vector<float> & lane_vector, const std::vector<long> & shape, const Time & stamp,
-  const rclcpp::Duration & lifetime, const std::array<float, 4> colors,
-  const std::string & frame_id, const bool set_traffic_light_color)
+  const Eigen::Matrix4f & transform_ego_to_map, const std::vector<float> & lane_vector,
+  const std::vector<long> & shape, const Time & stamp, const rclcpp::Duration & lifetime,
+  const std::array<float, 4> colors, const std::string & frame_id,
+  const bool set_traffic_light_color)
 {
   MarkerArray marker_array;
   const long P = shape[2];
@@ -73,7 +74,6 @@ MarkerArray create_lane_marker(
   color_bounds.a = 0.8;
 
   for (size_t l = 0; l < lane_vector.size() / (P * D); ++l) {
-    // Check if the centerline is all zeros
     Marker marker;
     marker.header.stamp = stamp;
     marker.header.frame_id = frame_id;
@@ -137,6 +137,8 @@ MarkerArray create_lane_marker(
       marker.color = get_traffic_light_color(g, y, r, color);
     }
 
+    // Check if the centerline is all zeros
+    float total_norm = 0.f;
     for (long p = 0; p < P; ++p) {
       auto x = lane_vector[P * D * l + p * D + X];
       auto y = lane_vector[P * D * l + p * D + Y];
@@ -145,9 +147,22 @@ MarkerArray create_lane_marker(
       auto rb_x = lane_vector[P * D * l + p * D + RB_X] + x;
       auto rb_y = lane_vector[P * D * l + p * D + RB_Y] + y;
 
-      float z = 0.5f;
-      float norm = std::sqrt(x * x + y * y);
-      if (norm < 1e-2) continue;
+      Eigen::Matrix<float, 4, 3> points;
+      points << x, lb_x, rb_x, y, lb_y, rb_y, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f;
+
+      // Apply transform
+      Eigen::Matrix<float, 4, 3> transformed = transform_ego_to_map * points;
+
+      // Assign back transformed values
+      x = transformed(0, 0);
+      y = transformed(1, 0);
+      lb_x = transformed(0, 1);
+      lb_y = transformed(1, 1);
+      rb_x = transformed(0, 2);
+      rb_y = transformed(1, 2);
+
+      float z = transformed(2, 0) + 0.1f;
+      total_norm += std::sqrt(x * x + y * y);
 
       Point pt;
       pt.x = x;
@@ -172,6 +187,9 @@ MarkerArray create_lane_marker(
       pt_sphere.y = y;
       pt_sphere.z = segment_count % 2 == 0 ? 0.5 : 1.0;
       marker_sphere.points.push_back(pt_sphere);
+    }
+    if (total_norm < 1e-2) {
+      continue;
     }
     ++segment_count;
 

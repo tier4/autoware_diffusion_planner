@@ -15,6 +15,7 @@
 #ifndef AUTOWARE__DIFFUSION_PLANNER__MARKER_UTILS_HPP_
 #define AUTOWARE__DIFFUSION_PLANNER__MARKER_UTILS_HPP_
 
+#include <Eigen/Dense>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/time.hpp>
 
@@ -69,8 +70,9 @@ ColorRGBA get_traffic_light_color(float g, float y, float r, const ColorRGBA & o
  * @return MarkerArray containing the generated lane markers.
  */
 MarkerArray create_lane_marker(
-  const std::vector<float> & lane_vector, const std::vector<long> & shape, const Time & stamp,
-  const rclcpp::Duration & lifetime, const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
+  const Eigen::Matrix4f & transform_ego_to_map, const std::vector<float> & lane_vector,
+  const std::vector<long> & shape, const Time & stamp, const rclcpp::Duration & lifetime,
+  const std::array<float, 4> colors = {0.0f, 1.0f, 0.0f, 0.8f},
   const std::string & frame_id = "base_link", const bool set_traffic_light_color = false);
 }  // namespace autoware::diffusion_planner::utils
 #endif  // AUTOWARE__DIFFUSION_PLANNER__MARKER_UTILS_HPP_
