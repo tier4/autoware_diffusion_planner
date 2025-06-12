@@ -185,7 +185,7 @@ MarkerArray create_lane_marker(
       Point pt_sphere;
       pt_sphere.x = x;
       pt_sphere.y = y;
-      pt_sphere.z = segment_count % 2 == 0 ? 0.5 : 1.0;
+      pt_sphere.z = z + 0.1f;
       marker_sphere.points.push_back(pt_sphere);
     }
     if (total_norm < 1e-2) {
