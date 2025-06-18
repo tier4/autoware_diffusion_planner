@@ -21,7 +21,6 @@
 #include "autoware/diffusion_planner/preprocessing/preprocessing_utils.hpp"
 #include "autoware/diffusion_planner/utils/marker_utils.hpp"
 #include "autoware/diffusion_planner/utils/utils.hpp"
-#include "onnxruntime_cxx_api.h"
 
 #include <autoware_lanelet2_extension/utility/query.hpp>
 #include <rclcpp/duration.hpp>
@@ -50,9 +49,7 @@ using autoware::tensorrt_common::Profiler;
 using autoware::tensorrt_common::TrtCommon;
 
 DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
-: Node("diffusion_planner", options),
-  session_(nullptr),
-  generator_uuid_(autoware_utils_uuid::generate_uuid())
+: Node("diffusion_planner", options), generator_uuid_(autoware_utils_uuid::generate_uuid())
 {
   // Initialize the node
   pub_trajectory_ = this->create_publisher<Trajectory>("~/output/trajectory", 1);
@@ -68,16 +65,9 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   set_up_params();
   normalization_map_ = utils::load_normalization_stats(params_.args_path);
 
-  if (params_.backend == "TENSORRT") {
-    init_pointers();
-    load_engine(params_.model_path);
-    CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
-  } else if (params_.backend == "ONNXRUNTIME") {
-    load_model(params_.model_path);
-  } else {
-    RCLCPP_ERROR(get_logger(), "Unsupported backend: %s", params_.backend.c_str());
-    std::exit(EXIT_FAILURE);
-  }
+  init_pointers();
+  load_engine(params_.model_path);
+  CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
 
   if (params_.build_only) {
     RCLCPP_INFO(get_logger(), "Build only mode enabled. Exiting after loading model.");
@@ -104,7 +94,6 @@ void DiffusionPlanner::set_up_params()
   // node params
   params_.model_path = this->declare_parameter<std::string>("onnx_model_path", "");
   params_.args_path = this->declare_parameter<std::string>("args_path", "");
-  params_.backend = this->declare_parameter<std::string>("backend", "TENSORRT");
   params_.plugins_path = this->declare_parameter<std::string>("plugins_path", "");
   params_.build_only = this->declare_parameter<bool>("build_only", false);
   params_.planning_frequency_hz = this->declare_parameter<double>("planning_frequency_hz", 10.0);
@@ -193,21 +182,6 @@ void DiffusionPlanner::init_pointers()
 
   // Output
   output_d_ = autoware::cuda_utils::make_unique<float[]>(output_size);
-}
-
-void DiffusionPlanner::load_model(const std::string & model_path)
-{
-  if (model_path.empty()) {
-    RCLCPP_ERROR(get_logger(), "Model path is empty");
-    std::exit(EXIT_FAILURE);
-  }
-  env_ = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "DiffusionPlanner");
-  session_options_.SetLogSeverityLevel(1);
-  session_options_.AppendExecutionProvider_CUDA(cuda_options_);
-  session_options_.SetIntraOpNumThreads(1);
-  session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
-  session_ = Ort::Session(env_, model_path.c_str(), session_options_);
-  RCLCPP_INFO(get_logger(), "Model loaded from %s", params_.model_path.c_str());
 }
 
 void DiffusionPlanner::load_engine(const std::string & model_path)
@@ -517,78 +491,6 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   return output_host;
 }
 
-std::vector<float> DiffusionPlanner::do_inference(InputDataMap & input_data_map)
-{
-  autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
-  auto & ego_current_state = input_data_map["ego_current_state"];
-  auto & neighbor_agents_past = input_data_map["neighbor_agents_past"];
-  auto & static_objects = input_data_map["static_objects"];
-  auto & lanes = input_data_map["lanes"];
-  auto & lanes_speed_limit = input_data_map["lanes_speed_limit"];
-  auto & route_lanes = input_data_map["route_lanes"];
-
-  // Allocate raw memory for bool array
-  size_t lane_speed_tensor_num_elements = std::accumulate(
-    LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
-  auto raw_speed_bool_array =
-    std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
-
-  for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
-    raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
-  }
-
-  auto mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  auto ego_current_state_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, ego_current_state.data(), ego_current_state.size(), EGO_CURRENT_STATE_SHAPE.data(),
-    EGO_CURRENT_STATE_SHAPE.size());
-  auto neighbor_agents_past_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, neighbor_agents_past.data(), neighbor_agents_past.size(), NEIGHBOR_SHAPE.data(),
-    NEIGHBOR_SHAPE.size());
-  auto static_objects_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, static_objects.data(), static_objects.size(), STATIC_OBJECTS_SHAPE.data(),
-    STATIC_OBJECTS_SHAPE.size());
-  auto lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes.data(), lanes.size(), LANES_SHAPE.data(), LANES_SHAPE.size());
-  auto lanes_speed_limit_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, lanes_speed_limit.data(), lanes_speed_limit.size(), LANES_SPEED_LIMIT_SHAPE.data(),
-    LANES_SPEED_LIMIT_SHAPE.size());
-  auto lane_has_speed_limit_tensor = Ort::Value::CreateTensor<bool>(
-    mem_info, raw_speed_bool_array.get(), lane_speed_tensor_num_elements,
-    LANE_HAS_SPEED_LIMIT_SHAPE.data(), LANE_HAS_SPEED_LIMIT_SHAPE.size());
-  auto route_lanes_tensor = Ort::Value::CreateTensor<float>(
-    mem_info, route_lanes.data(), route_lanes.size(), ROUTE_LANES_SHAPE.data(),
-    ROUTE_LANES_SHAPE.size());
-
-  Ort::Value input_tensors[] = {
-    std::move(ego_current_state_tensor), std::move(neighbor_agents_past_tensor),
-    std::move(static_objects_tensor),    std::move(lanes_tensor),
-    std::move(lanes_speed_limit_tensor), std::move(lane_has_speed_limit_tensor),
-    std::move(route_lanes_tensor)};
-
-  const char * input_names[] = {
-    "ego_current_state", "neighbor_agents_past",  "static_objects", "lanes",
-    "lanes_speed_limit", "lanes_has_speed_limit", "route_lanes"};
-
-  const char * output_names[] = {"output"};
-
-  // run inference
-  try {
-    auto output_value =
-      session_.Run(Ort::RunOptions{nullptr}, input_names, input_tensors, 7, output_names, 1);
-
-    const size_t output_size =
-      std::accumulate(OUTPUT_SHAPE.begin(), OUTPUT_SHAPE.end(), 1L, std::multiplies<>());
-    std::vector<float> output(output_size);
-    std::memcpy(
-      output.data(), output_value[0].GetTensorMutableData<float>(), output_size * sizeof(float));
-
-    return output;
-  } catch (const Ort::Exception & e) {
-    std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
-    return {};
-  }
-}
-
 void DiffusionPlanner::on_timer()
 {
   // Timer callback function
@@ -616,8 +518,7 @@ void DiffusionPlanner::on_timer()
       get_logger(), *this->get_clock(), 5000, "Input data contains invalid values");
     return;
   }
-  const auto predictions = (params_.backend == "TENSORRT") ? do_inference_trt(input_data_map)
-                                                           : do_inference(input_data_map);
+  const auto predictions = do_inference_trt(input_data_map);
   publish_predictions(predictions);
 }
 

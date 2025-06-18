@@ -61,20 +61,6 @@ else()
   set(CUDNN_AVAIL OFF)
 endif()
 
-# ONNX Runtime (your existing)
-option(ONNXRUNTIME_DIR "Path to ONNX Runtime install root" "$ENV{HOME}/onnxruntime-linux-x64-gpu-1.20.1")
-set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_DIR}/include")
-set(ONNXRUNTIME_LIB "${ONNXRUNTIME_DIR}/lib/libonnxruntime.so")
-
-set(ONNXRUNTIME_ROOT "$ENV{HOME}/onnxruntime-linux-x64-gpu-1.20.1")
-set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_ROOT}/include")
-set(ONNXRUNTIME_LIB "${ONNXRUNTIME_ROOT}/lib/libonnxruntime.so")
-
-include_directories(
-  include
-  ${ONNXRUNTIME_INCLUDE_DIR}
-)
-
 # Add compile option to suppress deprecation warnings (optional)
 add_compile_options(-Wno-deprecated-declarations)
 
@@ -92,10 +78,6 @@ ament_auto_add_library(autoware_diffusion_planner_component SHARED
   src/utils/marker_utils.cpp
 )
 
-# Link libraries for ONNX Runtime, CUDA, TensorRT as available
-target_link_libraries(autoware_diffusion_planner_component
-  ${ONNXRUNTIME_LIB}
-)
 
 if(TRT_AVAIL AND CUDA_AVAIL)
   target_include_directories(autoware_diffusion_planner_component PUBLIC

@@ -45,7 +45,6 @@ It is implemented as a ROS 2 component node, making it easy to integrate into Au
 
 ### Dependencies
 
-- [ONNX Runtime](https://onnxruntime.ai/) (see `CMakeLists.txt` for version and path)
 - Autoware Universe packages
 - Eigen3
 - Lanelet2
