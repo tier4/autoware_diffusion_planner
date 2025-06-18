@@ -16,7 +16,6 @@
 #define AUTOWARE__DIFFUSION_PLANNER__POSPROCESSING__POSPROCESSING_UTILS_HPP
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
-#include "onnxruntime_cxx_api.h"
 
 #include <Eigen/Dense>
 #include <rclcpp/rclcpp.hpp>

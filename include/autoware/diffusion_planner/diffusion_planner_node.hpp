@@ -58,7 +58,6 @@
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_routing/RoutingGraph.h>
 #include <lanelet2_traffic_rules/TrafficRules.h>
-#include <onnxruntime_cxx_api.h>
 
 #include <memory>
 #include <optional>
@@ -101,7 +100,6 @@ struct DiffusionPlannerParams
 {
   std::string model_path;
   std::string args_path;
-  std::string backend;
   std::string plugins_path;
   bool build_only;
   double planning_frequency_hz;
@@ -191,12 +189,6 @@ public:
   void init_pointers();
 
   /**
-   * @brief Load ONNX model from file.
-   * @param model_path Path to the ONNX model file.
-   */
-  void load_model(const std::string & model_path);
-
-  /**
    * @brief Load the TensorRT engine from the specified model path.
    * This function sets up the TensorRT engine with the required input and output shapes.
    * It also initializes the TrtConvCalib for calibration if needed.
@@ -215,13 +207,6 @@ public:
    * @param predictions Output from the model.
    */
   void publish_predictions(const std::vector<float> & predictions) const;
-
-  /**
-   * @brief Run inference on input data and return predictions.
-   * @param input_data_map Input data for the model.
-   * @return Optional vector of ONNX model outputs.
-   */
-  std::vector<float> do_inference(InputDataMap & input_data_map);
 
   /**
    * @brief Run inference on input data output is stored on member output_d_.
@@ -250,13 +235,6 @@ public:
 
   // current state
   Odometry ego_kinematic_state_;
-
-  // onnxruntime
-  OrtCUDAProviderOptions cuda_options_;
-  Ort::Env env_;
-  Ort::SessionOptions session_options_;
-  Ort::Session session_;
-  Ort::AllocatorWithDefaultOptions allocator_;
 
   // TensorRT
   std::unique_ptr<TrtConvCalib> trt_common_;
