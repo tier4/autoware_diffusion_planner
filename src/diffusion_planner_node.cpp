@@ -354,8 +354,8 @@ InputDataMap DiffusionPlanner::create_input_data()
   // route data on ego reference frame
   {
     const auto & current_pose = ego_kinematic_state->pose.pose;
-    constexpr double backward_path_length{5.0};
-    constexpr double forward_path_length{200.0};
+    constexpr double backward_path_length{0.0};
+    constexpr double forward_path_length{100.0};
     lanelet::ConstLanelet current_preferred_lane;
 
     if (
