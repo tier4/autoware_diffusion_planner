@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
   <arg name="diffusion_planner_param_path" default="$(find-pkg-share autoware_diffusion_planner)/config/diffusion_planner.param.yaml"/>
-  <!-- <arg name="onnx_model_path" default="$(env HOME)/pilot-auto-new-framework/src/autoware/trajectory_generator/autoware_diffusion_planner/data/model.onnx"/> -->
-  <arg name="onnx_model_path" default="$(env HOME)/Desktop/diffusion_planner_chkpt_250521/latest_25-05-21.onnx"/>
-  <arg name="args_path" default="$(env HOME)/pilot-auto-new-framework/src/autoware/trajectory_generator/autoware_diffusion_planner/data/args.json"/>
+  <arg name="onnx_model_path" default="/opt/autoware/mlmodels/diffusion_planner/model.onnx"/>
+  <arg name="args_path" default="/opt/autoware/mlmodels/diffusion_planner/args.json"/>
   <arg name="input/vector_map" default="/map/vector_map"/>
 
   <node pkg="autoware_diffusion_planner" exec="autoware_diffusion_planner_node" name="diffusion_planner_node" output="screen">
