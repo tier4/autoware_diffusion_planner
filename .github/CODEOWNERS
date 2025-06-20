@@ -1,0 +1,21 @@
+# Default owner for everything in the repo
+
+* <daniel.sanchez@tier4.jp>
+
+# Core source code
+
+/include/**<daniel.sanchez@tier4.jp>
+/src/** <daniel.sanchez@tier4.jp>
+/launch/**<daniel.sanchez@tier4.jp>
+/config/** <daniel.sanchez@tier4.jp>
+/tests/** <daniel.sanchez@tier4.jp>
+
+# Build files
+
+CMakeLists.txt <daniel.sanchez@tier4.jp>
+package.xml <daniel.sanchez@tier4.jp>
+
+# Documentation
+
+README.md <daniel.sanchez@tier4.jp>
+LICENSE <daniel.sanchez@tier4.jp>
