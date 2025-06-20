@@ -438,12 +438,13 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   auto route_lanes = input_data_map["route_lanes"];
 
   // Allocate bool array for lane speed limits
+  // Note: Using std::vector<uint8_t> instead of std::vector<bool> to ensure contiguous memory layout
   size_t lane_speed_tensor_num_elements = std::accumulate(
     LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
-  std::vector<bool> speed_bool_array(lane_speed_tensor_num_elements);
+  std::vector<uint8_t> speed_bool_array(lane_speed_tensor_num_elements);
 
   for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
-    speed_bool_array[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
+    speed_bool_array[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon()) ? 1 : 0;
   }
 
   CHECK_CUDA_ERROR(cudaMemcpy(
@@ -462,9 +463,11 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   CHECK_CUDA_ERROR(cudaMemcpy(
     route_lanes_d_.get(), route_lanes.data(), route_lanes.size() * sizeof(float),
     cudaMemcpyHostToDevice));
+  // Copy uint8_t array to bool array on device
+  // Note: sizeof(bool) might be implementation-specific, but CUDA typically uses 1 byte for bool
   CHECK_CUDA_ERROR(cudaMemcpy(
     lanes_has_speed_limit_d_.get(), speed_bool_array.data(),
-    lane_speed_tensor_num_elements * sizeof(bool), cudaMemcpyHostToDevice));
+    lane_speed_tensor_num_elements * sizeof(uint8_t), cudaMemcpyHostToDevice));
 
   network_trt_ptr_->setTensorAddress("ego_current_state", ego_current_state_d_.get());
   network_trt_ptr_->setTensorAddress("neighbor_agents_past", neighbor_agents_past_d_.get());
