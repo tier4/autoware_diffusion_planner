@@ -45,7 +45,12 @@ void normalize_input_data(InputDataMap & input_data_map, const NormalizationMap 
       for (size_t col = 0; col < cols; ++col) {
         float m = (mean.size() == 1) ? mean[0] : mean[col];
         float s = (std_dev.size() == 1) ? std_dev[0] : std_dev[col];
-        data[offset + col] = (data[offset + col] - m) / s;
+        // Prevent division by zero
+        if (std::abs(s) < std::numeric_limits<float>::epsilon()) {
+          data[offset + col] = 0.0f;  // or keep unchanged
+        } else {
+          data[offset + col] = (data[offset + col] - m) / s;
+        }
       }
     }
   };

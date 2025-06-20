@@ -167,6 +167,7 @@ class DiffusionPlanner : public rclcpp::Node
 {
 public:
   explicit DiffusionPlanner(const rclcpp::NodeOptions & options);
+  ~DiffusionPlanner();
   /**
    * @brief Initialize and declare node parameters.
    */
