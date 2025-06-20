@@ -14,6 +14,7 @@
 
 #include "autoware/diffusion_planner/diffusion_planner_node.hpp"
 
+#include "autoware/diffusion_planner/constants.hpp"
 #include "autoware/diffusion_planner/conversion/agent.hpp"
 #include "autoware/diffusion_planner/conversion/ego.hpp"
 #include "autoware/diffusion_planner/dimensions.hpp"
@@ -87,6 +88,14 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
   // Parameter Callback
   set_param_res_ = add_on_set_parameters_callback(
     std::bind(&DiffusionPlanner::on_parameter, this, std::placeholders::_1));
+}
+
+DiffusionPlanner::~DiffusionPlanner()
+{
+  // Clean up CUDA resources
+  if (stream_) {
+    cudaStreamDestroy(stream_);
+  }
 }
 
 void DiffusionPlanner::set_up_params()
@@ -297,7 +306,7 @@ InputDataMap DiffusionPlanner::create_input_data()
 
   if (!objects || !ego_kinematic_state || !ego_acceleration || !route_ptr_) {
     RCLCPP_WARN_THROTTLE(
-      get_logger(), *this->get_clock(), 5000,
+      get_logger(), *this->get_clock(), constants::LOG_THROTTLE_INTERVAL_MS,
       "No tracked objects or ego kinematic state or route data received");
     return {};
   }
@@ -354,8 +363,8 @@ InputDataMap DiffusionPlanner::create_input_data()
   // route data on ego reference frame
   {
     const auto & current_pose = ego_kinematic_state->pose.pose;
-    constexpr double backward_path_length{0.0};
-    constexpr double forward_path_length{100.0};
+    constexpr double backward_path_length{constants::BACKWARD_PATH_LENGTH_M};
+    constexpr double forward_path_length{constants::FORWARD_PATH_LENGTH_M};
     lanelet::ConstLanelet current_preferred_lane;
 
     if (
@@ -428,35 +437,34 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   auto lanes_speed_limit = input_data_map["lanes_speed_limit"];
   auto route_lanes = input_data_map["route_lanes"];
 
-  // Allocate raw memory for bool array
+  // Allocate bool array for lane speed limits
   size_t lane_speed_tensor_num_elements = std::accumulate(
     LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
-  auto raw_speed_bool_array =
-    std::shared_ptr<bool>(new bool[lane_speed_tensor_num_elements], std::default_delete<bool[]>());
+  std::vector<bool> speed_bool_array(lane_speed_tensor_num_elements);
 
   for (size_t i = 0; i < lane_speed_tensor_num_elements; ++i) {
-    raw_speed_bool_array.get()[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
+    speed_bool_array[i] = (lanes_speed_limit[i] > std::numeric_limits<float>::epsilon());
   }
 
-  cudaMemcpy(
+  CHECK_CUDA_ERROR(cudaMemcpy(
     ego_current_state_d_.get(), ego_current_state.data(), ego_current_state.size() * sizeof(float),
-    cudaMemcpyHostToDevice);
-  cudaMemcpy(
+    cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(cudaMemcpy(
     neighbor_agents_past_d_.get(), neighbor_agents_past.data(),
-    neighbor_agents_past.size() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(
+    neighbor_agents_past.size() * sizeof(float), cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(cudaMemcpy(
     static_objects_d_.get(), static_objects.data(), static_objects.size() * sizeof(float),
-    cudaMemcpyHostToDevice);
-  cudaMemcpy(lanes_d_.get(), lanes.data(), lanes.size() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(
+    cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(cudaMemcpy(lanes_d_.get(), lanes.data(), lanes.size() * sizeof(float), cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(cudaMemcpy(
     lanes_speed_limit_d_.get(), lanes_speed_limit.data(), lanes_speed_limit.size() * sizeof(float),
-    cudaMemcpyHostToDevice);
-  cudaMemcpy(
+    cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(cudaMemcpy(
     route_lanes_d_.get(), route_lanes.data(), route_lanes.size() * sizeof(float),
-    cudaMemcpyHostToDevice);
-  cudaMemcpy(
-    lanes_has_speed_limit_d_.get(), raw_speed_bool_array.get(),
-    lane_speed_tensor_num_elements * sizeof(bool), cudaMemcpyHostToDevice);
+    cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(cudaMemcpy(
+    lanes_has_speed_limit_d_.get(), speed_bool_array.data(),
+    lane_speed_tensor_num_elements * sizeof(bool), cudaMemcpyHostToDevice));
 
   network_trt_ptr_->setTensorAddress("ego_current_state", ego_current_state_d_.get());
   network_trt_ptr_->setTensorAddress("neighbor_agents_past", neighbor_agents_past_d_.get());
@@ -528,7 +536,11 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
   lanelet::utils::conversion::fromBinMsg(
     *map_msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 
-  lanelet_converter_ptr_ = std::make_unique<LaneletConverter>(lanelet_map_ptr_, 100, 20, 100.0);
+  lanelet_converter_ptr_ = std::make_unique<LaneletConverter>(
+    lanelet_map_ptr_, 
+    constants::LaneletConverterParams::MAX_LANELETS,
+    constants::LaneletConverterParams::MAX_POINTS_PER_LANE,
+    constants::LaneletConverterParams::SEARCH_RADIUS_M);
   lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments(POINTS_PER_SEGMENT);
 
   if (lane_segments_.empty()) {
