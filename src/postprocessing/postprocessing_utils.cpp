@@ -167,8 +167,9 @@ Eigen::MatrixXf get_prediction_matrix(
                           ", tensor_rows=" + std::to_string(tensor_data.rows()));
   }
   
-  Eigen::MatrixXf prediction_matrix =
-    tensor_data.block(start_row, 0, rows, cols);
+  // Extract and copy the block to ensure we have a proper matrix, not just a view
+  Eigen::MatrixXf prediction_matrix = 
+    tensor_data.block(start_row, 0, rows, cols).eval();
 
   // Copy only the relevant part
   prediction_matrix.transposeInPlace();
