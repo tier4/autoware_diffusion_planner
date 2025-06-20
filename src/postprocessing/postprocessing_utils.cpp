@@ -175,6 +175,8 @@ Trajectory get_trajectory_from_prediction_matrix(
   double prev_y = ego_position(1);
   for (long row = 0; row < prediction_matrix.rows(); ++row) {
     TrajectoryPoint p;
+    p.time_from_start.sec = static_cast<int>(dt * static_cast<double>(row));
+    p.time_from_start.nanosec = static_cast<int>((dt * static_cast<double>(row) - p.time_from_start.sec) * 1e9);
     p.pose.position.x = prediction_matrix(row, 0);
     p.pose.position.y = prediction_matrix(row, 1);
     p.pose.position.z = ego_position.z();
