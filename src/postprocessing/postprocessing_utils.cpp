@@ -88,7 +88,7 @@ PredictedObjects create_predicted_objects(
   // First prediction is of ego (agent 0). Predictions from index 1 to last are of the closest
   // neighbors. ego_centric_agent_data contains neighbor history information ordered by distance.
   for (long agent = 1; agent < agent_size; ++agent) {
-    if (static_cast<size_t>(agent) > objects_history.size()) {
+    if (static_cast<size_t>(agent) - 1 >= objects_history.size()) {
       break;
     }
     PredictedObject object;
@@ -176,7 +176,8 @@ Trajectory get_trajectory_from_prediction_matrix(
   for (long row = 0; row < prediction_matrix.rows(); ++row) {
     TrajectoryPoint p;
     p.time_from_start.sec = static_cast<int>(dt * static_cast<double>(row));
-    p.time_from_start.nanosec = static_cast<int>((dt * static_cast<double>(row) - p.time_from_start.sec) * 1e9);
+    p.time_from_start.nanosec =
+      static_cast<int>((dt * static_cast<double>(row) - p.time_from_start.sec) * 1e9);
     p.pose.position.x = prediction_matrix(row, 0);
     p.pose.position.y = prediction_matrix(row, 1);
     p.pose.position.z = ego_position.z();
