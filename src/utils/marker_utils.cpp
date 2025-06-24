@@ -32,8 +32,8 @@ namespace
 {
 // Helper function to create a basic marker with common properties
 Marker create_base_marker(
-  const Time & stamp, const std::string & frame_id, const std::string & ns, int id,
-  int type, const ColorRGBA & color, const rclcpp::Duration & lifetime, double scale_x)
+  const Time & stamp, const std::string & frame_id, const std::string & ns, int id, int type,
+  const ColorRGBA & color, const rclcpp::Duration & lifetime, double scale_x)
 {
   Marker marker;
   marker.header.stamp = stamp;
@@ -50,7 +50,8 @@ Marker create_base_marker(
 }
 
 // Helper to extract point data from lane vector
-struct LanePointData {
+struct LanePointData
+{
   float x, y;
   float lb_x, lb_y;
   float rb_x, rb_y;
@@ -72,7 +73,8 @@ LanePointData extract_lane_point(
 }
 
 // Helper to transform points
-struct TransformedPoints {
+struct TransformedPoints
+{
   float x, y, z;
   float lb_x, lb_y;
   float rb_x, rb_y;
@@ -82,13 +84,11 @@ TransformedPoints transform_lane_points(
   const LanePointData & data, const Eigen::Matrix4f & transform)
 {
   Eigen::Matrix<float, 4, 3> points;
-  points << data.x, data.lb_x, data.rb_x,
-            data.y, data.lb_y, data.rb_y,
-            0.0f, 0.0f, 0.0f,
-            1.0f, 1.0f, 1.0f;
-  
+  points << data.x, data.lb_x, data.rb_x, data.y, data.lb_y, data.rb_y, 0.0f, 0.0f, 0.0f, 1.0f,
+    1.0f, 1.0f;
+
   Eigen::Matrix<float, 4, 3> transformed = transform * points;
-  
+
   TransformedPoints result;
   result.x = transformed(0, 0);
   result.y = transformed(1, 0);
@@ -147,14 +147,14 @@ MarkerArray create_lane_marker(
   const long D = shape[3];
   const size_t num_segments = lane_vector.size() / (P * D);
   long segment_count = 0;
-
+  constexpr float near_zero_threshold = 1e-2f;
   // Setup colors
   ColorRGBA lane_color;
   lane_color.r = colors[0];
   lane_color.g = colors[1];
   lane_color.b = colors[2];
   lane_color.a = colors[3];
-  
+
   ColorRGBA bounds_color;
   bounds_color.r = 0.9f;
   bounds_color.g = 0.65f;
@@ -164,27 +164,26 @@ MarkerArray create_lane_marker(
   for (size_t l = 0; l < num_segments; ++l) {
     // Create markers for this segment
     Marker marker_centerline = create_base_marker(
-      stamp, frame_id, "lane", static_cast<int>(l), 
-      Marker::LINE_STRIP, lane_color, lifetime, 0.3);
-    
+      stamp, frame_id, "lane", static_cast<int>(l), Marker::LINE_STRIP, lane_color, lifetime, 0.3);
+
     Marker marker_left_bound = create_base_marker(
-      stamp, frame_id, "lane_lb", static_cast<int>(l),
-      Marker::LINE_STRIP, bounds_color, lifetime, 0.3);
-    
+      stamp, frame_id, "lane_lb", static_cast<int>(l), Marker::LINE_STRIP, bounds_color, lifetime,
+      0.3);
+
     Marker marker_right_bound = create_base_marker(
-      stamp, frame_id, "lane_rb", static_cast<int>(l),
-      Marker::LINE_STRIP, bounds_color, lifetime, 0.3);
-    
+      stamp, frame_id, "lane_rb", static_cast<int>(l), Marker::LINE_STRIP, bounds_color, lifetime,
+      0.3);
+
     // Sphere marker with alternating colors
     ColorRGBA sphere_color;
     sphere_color.r = segment_count % 2 == 0 ? 0.1f : 0.9f;
     sphere_color.g = segment_count % 2 == 0 ? 0.9f : 0.1f;
     sphere_color.b = 0.9f;
     sphere_color.a = 0.8f;
-    
+
     Marker marker_sphere = create_base_marker(
-      stamp, frame_id, "sphere", static_cast<int>(l),
-      Marker::SPHERE_LIST, sphere_color, lifetime, 0.5);
+      stamp, frame_id, "sphere", static_cast<int>(l), Marker::SPHERE_LIST, sphere_color, lifetime,
+      0.5);
     marker_sphere.scale.y = 0.5;
     marker_sphere.scale.z = 0.5;
 
@@ -204,7 +203,7 @@ MarkerArray create_lane_marker(
       total_norm += point_data.norm;
 
       // Skip near-zero points (likely padding)
-      if (point_data.norm < 1e-2) {
+      if (point_data.norm < near_zero_threshold) {
         continue;
       }
 
@@ -219,7 +218,7 @@ MarkerArray create_lane_marker(
     }
 
     // Skip empty segments
-    if (total_norm < 1e-2) {
+    if (total_norm < near_zero_threshold) {
       continue;
     }
     ++segment_count;
@@ -238,7 +237,7 @@ MarkerArray create_lane_marker(
       marker_array.markers.push_back(marker_right_bound);
     }
   }
-  
+
   return marker_array;
 }
 
