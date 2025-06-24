@@ -28,6 +28,90 @@ namespace autoware::diffusion_planner::utils
 {
 using geometry_msgs::msg::Point;
 
+namespace
+{
+// Helper function to create a basic marker with common properties
+Marker create_base_marker(
+  const Time & stamp, const std::string & frame_id, const std::string & ns, int id,
+  int type, const ColorRGBA & color, const rclcpp::Duration & lifetime, double scale_x)
+{
+  Marker marker;
+  marker.header.stamp = stamp;
+  marker.header.frame_id = frame_id;
+  marker.ns = ns;
+  marker.id = id;
+  marker.type = type;
+  marker.action = Marker::ADD;
+  marker.pose.orientation.w = 1.0;
+  marker.scale.x = scale_x;
+  marker.color = color;
+  marker.lifetime = lifetime;
+  return marker;
+}
+
+// Helper to extract point data from lane vector
+struct LanePointData {
+  float x, y;
+  float lb_x, lb_y;
+  float rb_x, rb_y;
+  float norm;
+};
+
+LanePointData extract_lane_point(
+  const std::vector<float> & lane_vector, long l, long p, long P, long D)
+{
+  LanePointData data;
+  data.x = lane_vector[P * D * l + p * D + X];
+  data.y = lane_vector[P * D * l + p * D + Y];
+  data.lb_x = lane_vector[P * D * l + p * D + LB_X] + data.x;
+  data.lb_y = lane_vector[P * D * l + p * D + LB_Y] + data.y;
+  data.rb_x = lane_vector[P * D * l + p * D + RB_X] + data.x;
+  data.rb_y = lane_vector[P * D * l + p * D + RB_Y] + data.y;
+  data.norm = std::sqrt(data.x * data.x + data.y * data.y);
+  return data;
+}
+
+// Helper to transform points
+struct TransformedPoints {
+  float x, y, z;
+  float lb_x, lb_y;
+  float rb_x, rb_y;
+};
+
+TransformedPoints transform_lane_points(
+  const LanePointData & data, const Eigen::Matrix4f & transform)
+{
+  Eigen::Matrix<float, 4, 3> points;
+  points << data.x, data.lb_x, data.rb_x,
+            data.y, data.lb_y, data.rb_y,
+            0.0f, 0.0f, 0.0f,
+            1.0f, 1.0f, 1.0f;
+  
+  Eigen::Matrix<float, 4, 3> transformed = transform * points;
+  
+  TransformedPoints result;
+  result.x = transformed(0, 0);
+  result.y = transformed(1, 0);
+  result.lb_x = transformed(0, 1);
+  result.lb_y = transformed(1, 1);
+  result.rb_x = transformed(0, 2);
+  result.rb_y = transformed(1, 2);
+  result.z = transformed(2, 0) + 0.1f;
+  return result;
+}
+
+// Helper to add point to marker
+void add_point_to_marker(Marker & marker, float x, float y, float z)
+{
+  Point pt;
+  pt.x = x;
+  pt.y = y;
+  pt.z = z;
+  marker.points.push_back(pt);
+}
+
+}  // anonymous namespace
+
 ColorRGBA get_traffic_light_color(float g, float y, float r, const ColorRGBA & original_color)
 {
   ColorRGBA color;
@@ -61,160 +145,100 @@ MarkerArray create_lane_marker(
   MarkerArray marker_array;
   const long P = shape[2];
   const long D = shape[3];
+  const size_t num_segments = lane_vector.size() / (P * D);
   long segment_count = 0;
 
-  ColorRGBA color;
-  color.r = colors[0];
-  color.g = colors[1];
-  color.b = colors[2];
-  color.a = colors[3];
+  // Setup colors
+  ColorRGBA lane_color;
+  lane_color.r = colors[0];
+  lane_color.g = colors[1];
+  lane_color.b = colors[2];
+  lane_color.a = colors[3];
+  
+  ColorRGBA bounds_color;
+  bounds_color.r = 0.9f;
+  bounds_color.g = 0.65f;
+  bounds_color.b = 0.0f;
+  bounds_color.a = 0.8f;
 
-  ColorRGBA color_bounds;
-  color_bounds.r = 0.9;
-  color_bounds.g = 0.65;
-  color_bounds.b = 0.0;
-  color_bounds.a = 0.8;
-
-  for (size_t l = 0; l < lane_vector.size() / (P * D); ++l) {
-    Marker marker;
-    marker.header.stamp = stamp;
-    marker.header.frame_id = frame_id;
-    marker.ns = "lane";
-    marker.id = static_cast<int>(l);
-    marker.type = Marker::LINE_STRIP;
-    marker.action = Marker::ADD;
-    marker.pose.orientation.w = 1.0;
-    marker.scale.x = 0.3;
-    marker.color = color;
-    marker.lifetime = lifetime;
-
-    Marker marker_lb;
-    marker_lb.header.stamp = stamp;
-    marker_lb.header.frame_id = frame_id;
-    marker_lb.ns = "lane_lb";
-    marker_lb.id = static_cast<int>(l);
-    marker_lb.type = Marker::LINE_STRIP;
-    marker_lb.action = Marker::ADD;
-    marker_lb.pose.orientation.w = 1.0;
-    marker_lb.scale.x = 0.3;
-    marker_lb.color = color_bounds;
-    marker_lb.lifetime = lifetime;
-
-    Marker marker_rb;
-    marker_rb.header.stamp = stamp;
-    marker_rb.header.frame_id = frame_id;
-    marker_rb.ns = "lane_rb";
-    marker_rb.id = static_cast<int>(l);
-    marker_rb.type = Marker::LINE_STRIP;
-    marker_rb.action = Marker::ADD;
-    marker_rb.pose.orientation.w = 1.0;
-    marker_rb.scale.x = 0.3;
-    marker_rb.color = color_bounds;
-    marker_rb.lifetime = lifetime;
-
-    Marker marker_sphere;
-    marker_sphere.header.stamp = stamp;
-    marker_sphere.header.frame_id = frame_id;
-    marker_sphere.ns = "sphere";
-    marker_sphere.id = static_cast<int>(l);
-    marker_sphere.type = Marker::SPHERE_LIST;
-    marker_sphere.action = Marker::ADD;
-    marker_sphere.pose.orientation.w = 1.0;
-    marker_sphere.scale.x = 0.5;
+  for (size_t l = 0; l < num_segments; ++l) {
+    // Create markers for this segment
+    Marker marker_centerline = create_base_marker(
+      stamp, frame_id, "lane", static_cast<int>(l), 
+      Marker::LINE_STRIP, lane_color, lifetime, 0.3);
+    
+    Marker marker_left_bound = create_base_marker(
+      stamp, frame_id, "lane_lb", static_cast<int>(l),
+      Marker::LINE_STRIP, bounds_color, lifetime, 0.3);
+    
+    Marker marker_right_bound = create_base_marker(
+      stamp, frame_id, "lane_rb", static_cast<int>(l),
+      Marker::LINE_STRIP, bounds_color, lifetime, 0.3);
+    
+    // Sphere marker with alternating colors
+    ColorRGBA sphere_color;
+    sphere_color.r = segment_count % 2 == 0 ? 0.1f : 0.9f;
+    sphere_color.g = segment_count % 2 == 0 ? 0.9f : 0.1f;
+    sphere_color.b = 0.9f;
+    sphere_color.a = 0.8f;
+    
+    Marker marker_sphere = create_base_marker(
+      stamp, frame_id, "sphere", static_cast<int>(l),
+      Marker::SPHERE_LIST, sphere_color, lifetime, 0.5);
     marker_sphere.scale.y = 0.5;
     marker_sphere.scale.z = 0.5;
-    marker_sphere.lifetime = lifetime;
 
-    ColorRGBA color_sphere;
-    color_sphere.r = segment_count % 2 == 0 ? 0.1 : 0.9;
-    color_sphere.g = segment_count % 2 == 0 ? 0.9 : 0.1;
-    color_sphere.b = 0.9;
-    color_sphere.a = 0.8;
-    marker_sphere.color = color_sphere;
-
+    // Apply traffic light color if requested
     if (set_traffic_light_color) {
-      auto g = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_GREEN];
-      auto y = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_YELLOW];
-      auto r = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_RED];
-      marker.color = get_traffic_light_color(g, y, r, color);
+      const auto g = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_GREEN];
+      const auto y = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_YELLOW];
+      const auto r = lane_vector[P * D * l + 0 * D + TRAFFIC_LIGHT_RED];
+      marker_centerline.color = get_traffic_light_color(g, y, r, lane_color);
     }
 
-    // Check if the centerline is all zeros
-    float total_norm = 0.f;
+    // Process points for this segment
+    float total_norm = 0.0f;
     for (long p = 0; p < P; ++p) {
-      auto x = lane_vector[P * D * l + p * D + X];
-      auto y = lane_vector[P * D * l + p * D + Y];
-      auto lb_x = lane_vector[P * D * l + p * D + LB_X] + x;
-      auto lb_y = lane_vector[P * D * l + p * D + LB_Y] + y;
-      auto rb_x = lane_vector[P * D * l + p * D + RB_X] + x;
-      auto rb_y = lane_vector[P * D * l + p * D + RB_Y] + y;
-      const auto norm = std::sqrt(x * x + y * y);
-      total_norm += norm;
+      // Extract point data
+      LanePointData point_data = extract_lane_point(lane_vector, l, p, P, D);
+      total_norm += point_data.norm;
 
-      if (norm < 1e-2) {
-        // Skip this point if it is too close to zero
-        // Reason: this point is likely part of padding or an empty segment
+      // Skip near-zero points (likely padding)
+      if (point_data.norm < 1e-2) {
         continue;
       }
 
-      Eigen::Matrix<float, 4, 3> points;
-      points << x, lb_x, rb_x, y, lb_y, rb_y, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f;
+      // Transform points from ego to map frame
+      TransformedPoints transformed = transform_lane_points(point_data, transform_ego_to_map);
 
-      // Apply transform
-      Eigen::Matrix<float, 4, 3> transformed = transform_ego_to_map * points;
-
-      // Assign back transformed values
-      x = transformed(0, 0);
-      y = transformed(1, 0);
-      lb_x = transformed(0, 1);
-      lb_y = transformed(1, 1);
-      rb_x = transformed(0, 2);
-      rb_y = transformed(1, 2);
-
-      float z = transformed(2, 0) + 0.1f;
-      Point pt;
-      pt.x = x;
-      pt.y = y;
-      pt.z = z;
-      marker.points.push_back(pt);
-
-      Point lb_pt;
-      lb_pt.x = lb_x;
-      lb_pt.y = lb_y;
-      lb_pt.z = z;
-      marker_lb.points.push_back(lb_pt);
-
-      Point rb_pt;
-      rb_pt.x = rb_x;
-      rb_pt.y = rb_y;
-      rb_pt.z = z;
-      marker_rb.points.push_back(rb_pt);
-
-      Point pt_sphere;
-      pt_sphere.x = x;
-      pt_sphere.y = y;
-      pt_sphere.z = z + 0.1f;
-      marker_sphere.points.push_back(pt_sphere);
+      // Add points to respective markers
+      add_point_to_marker(marker_centerline, transformed.x, transformed.y, transformed.z);
+      add_point_to_marker(marker_left_bound, transformed.lb_x, transformed.lb_y, transformed.z);
+      add_point_to_marker(marker_right_bound, transformed.rb_x, transformed.rb_y, transformed.z);
+      add_point_to_marker(marker_sphere, transformed.x, transformed.y, transformed.z + 0.1f);
     }
+
+    // Skip empty segments
     if (total_norm < 1e-2) {
-      // Empty lane segment, skip it
       continue;
     }
     ++segment_count;
 
+    // Add non-empty markers to array
     if (!marker_sphere.points.empty()) {
       marker_array.markers.push_back(marker_sphere);
     }
-    if (!marker.points.empty()) {
-      marker_array.markers.push_back(marker);
+    if (!marker_centerline.points.empty()) {
+      marker_array.markers.push_back(marker_centerline);
     }
-    if (!marker_lb.points.empty()) {
-      marker_array.markers.push_back(marker_lb);
+    if (!marker_left_bound.points.empty()) {
+      marker_array.markers.push_back(marker_left_bound);
     }
-    if (!marker_rb.points.empty()) {
-      marker_array.markers.push_back(marker_rb);
+    if (!marker_right_bound.points.empty()) {
+      marker_array.markers.push_back(marker_right_bound);
     }
   }
+  
   return marker_array;
 }
 
