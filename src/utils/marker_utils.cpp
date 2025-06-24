@@ -22,6 +22,8 @@
 #include <geometry_msgs/msg/detail/point__struct.hpp>
 #include <geometry_msgs/msg/point.hpp>  // Include the header for Point
 
+#include <iostream>
+
 namespace autoware::diffusion_planner::utils
 {
 using geometry_msgs::msg::Point;
@@ -146,6 +148,14 @@ MarkerArray create_lane_marker(
       auto lb_y = lane_vector[P * D * l + p * D + LB_Y] + y;
       auto rb_x = lane_vector[P * D * l + p * D + RB_X] + x;
       auto rb_y = lane_vector[P * D * l + p * D + RB_Y] + y;
+      const auto norm = std::sqrt(x * x + y * y);
+      total_norm += norm;
+
+      if (norm < 1e-2) {
+        // Skip this point if it is too close to zero
+        // Reason: this point is likely part of padding or an empty segment
+        continue;
+      }
 
       Eigen::Matrix<float, 4, 3> points;
       points << x, lb_x, rb_x, y, lb_y, rb_y, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f;
@@ -162,8 +172,6 @@ MarkerArray create_lane_marker(
       rb_y = transformed(1, 2);
 
       float z = transformed(2, 0) + 0.1f;
-      total_norm += std::sqrt(x * x + y * y);
-
       Point pt;
       pt.x = x;
       pt.y = y;
@@ -189,6 +197,7 @@ MarkerArray create_lane_marker(
       marker_sphere.points.push_back(pt_sphere);
     }
     if (total_norm < 1e-2) {
+      // Empty lane segment, skip it
       continue;
     }
     ++segment_count;
