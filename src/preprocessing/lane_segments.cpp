@@ -124,11 +124,11 @@ Eigen::RowVector4f get_traffic_signal_row_vector(
   const autoware_perception_msgs::msg::TrafficLightGroup & signal)
 {
   const auto is_green = autoware::traffic_light_utils::hasTrafficLightCircleColor(
-    signal, autoware_perception_msgs::msg::TrafficLightElement::GREEN);
+    signal.elements, autoware_perception_msgs::msg::TrafficLightElement::GREEN);
   const auto is_amber = autoware::traffic_light_utils::hasTrafficLightCircleColor(
-    signal, autoware_perception_msgs::msg::TrafficLightElement::AMBER);
+    signal.elements, autoware_perception_msgs::msg::TrafficLightElement::AMBER);
   const auto is_red = autoware::traffic_light_utils::hasTrafficLightCircleColor(
-    signal, autoware_perception_msgs::msg::TrafficLightElement::RED);
+    signal.elements, autoware_perception_msgs::msg::TrafficLightElement::RED);
 
   const bool has_color = (is_green || is_amber || is_red);
 
