@@ -105,57 +105,36 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
   result.push_back(input.back());
 
   // Recalculate direction vectors based on actual interpolated positions
-  // Handle first point direction
-  if (result.size() > 1) {
-    float dx = result[1].x() - result[0].x();
-    float dy = result[1].y() - result[0].y();
-    float dz = result[1].z() - result[0].z();
+  // Helper lambda to update a point's direction vector
+  auto update_point_direction = [](std::vector<LanePoint> & points, size_t point_idx,
+                                   size_t from_idx, size_t to_idx) {
+    float dx = points[to_idx].x() - points[from_idx].x();
+    float dy = points[to_idx].y() - points[from_idx].y();
+    float dz = points[to_idx].z() - points[from_idx].z();
     float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
 
     if (magnitude > 1e-6f) {
       dx /= magnitude;
       dy /= magnitude;
       dz /= magnitude;
-      result[0] = LanePoint(
-        result[0].x(), result[0].y(), result[0].z(),
-        dx, dy, dz, result[0].label());
+      points[point_idx] = LanePoint(
+        points[point_idx].x(), points[point_idx].y(), points[point_idx].z(),
+        dx, dy, dz, points[point_idx].label());
     }
-  }
+  };
 
-  // Handle middle points
-  for (size_t i = 1; i < result.size() - 1; ++i) {
-    float dx = result[i + 1].x() - result[i].x();
-    float dy = result[i + 1].y() - result[i].y();
-    float dz = result[i + 1].z() - result[i].z();
-    float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-    if (magnitude > 1e-6f) {
-      dx /= magnitude;
-      dy /= magnitude;
-      dz /= magnitude;
-      // Create new point with corrected direction
-      result[i] = LanePoint(
-        result[i].x(), result[i].y(), result[i].z(),
-        dx, dy, dz, result[i].label());
-    }
-  }
-
-  // Handle last point direction
   if (result.size() > 1) {
+    // Handle first point direction (points to next)
+    update_point_direction(result, 0, 0, 1);
+
+    // Handle middle points (point to next)
+    for (size_t i = 1; i < result.size() - 1; ++i) {
+      update_point_direction(result, i, i, i + 1);
+    }
+
+    // Handle last point direction (from previous)
     size_t last_idx = result.size() - 1;
-    float dx = result[last_idx].x() - result[last_idx - 1].x();
-    float dy = result[last_idx].y() - result[last_idx - 1].y();
-    float dz = result[last_idx].z() - result[last_idx - 1].z();
-    float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-    if (magnitude > 1e-6f) {
-      dx /= magnitude;
-      dy /= magnitude;
-      dz /= magnitude;
-      result[last_idx] = LanePoint(
-        result[last_idx].x(), result[last_idx].y(), result[last_idx].z(),
-        dx, dy, dz, result[last_idx].label());
-    }
+    update_point_direction(result, last_idx, last_idx - 1, last_idx);
   }
 
   return result;
