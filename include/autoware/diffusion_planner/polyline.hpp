@@ -27,6 +27,17 @@ constexpr size_t POINT_STATE_DIM = 7;
 
 enum PolylineLabel { LANE = 0, ROAD_LINE = 1, ROAD_EDGE = 2, CROSSWALK = 3 };
 
+// Normalize a 3D direction vector (shared utility)
+inline void normalize_direction(float & dx, float & dy, float & dz)
+{
+  const float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
+  if (magnitude > 1e-6f) {
+    dx /= magnitude;
+    dy /= magnitude;
+    dz /= magnitude;
+  }
+}
+
 struct LanePoint
 {
   // Construct a new instance filling all elements by `0.0f`.
@@ -91,17 +102,33 @@ struct LanePoint
   // Return the address pointer of data array.
   [[nodiscard]] const float * data_ptr() const noexcept { return data_.data(); }
 
-  // TODO(Daniel): implement for dx,dy,dz ? label?
   [[nodiscard]] LanePoint lerp(const LanePoint & other, float t) const
   {
-    return LanePoint{
-      x_ + t * (other.x_ - x_),
-      y_ + t * (other.y_ - y_),
-      z_ + t * (other.z_ - z_),
-      data_[3],
-      data_[4],
-      data_[5],
-      data_[6]};
+    // Interpolate position
+    float new_x = x_ + t * (other.x_ - x_);
+    float new_y = y_ + t * (other.y_ - y_);
+    float new_z = z_ + t * (other.z_ - z_);
+
+    // Calculate direction vector from interpolated positions
+    float new_dx = other.x_ - x_;
+    float new_dy = other.y_ - y_;
+    float new_dz = other.z_ - z_;
+
+    // Check if points are too close
+    const float magnitude_sq = new_dx * new_dx + new_dy * new_dy + new_dz * new_dz;
+    if (magnitude_sq < 1e-12f) {
+      // If points are too close, use the first point's direction
+      new_dx = dx_;
+      new_dy = dy_;
+      new_dz = dz_;
+    } else {
+      normalize_direction(new_dx, new_dy, new_dz);
+    }
+
+    // Interpolate label
+    float new_label = label_ + t * (other.label_ - label_);
+
+    return LanePoint{new_x, new_y, new_z, new_dx, new_dy, new_dz, new_label};
   }
 
 private:
