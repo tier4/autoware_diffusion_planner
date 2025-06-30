@@ -27,6 +27,17 @@ constexpr size_t POINT_STATE_DIM = 7;
 
 enum PolylineLabel { LANE = 0, ROAD_LINE = 1, ROAD_EDGE = 2, CROSSWALK = 3 };
 
+// Normalize a 3D direction vector (shared utility)
+inline void normalize_direction(float & dx, float & dy, float & dz)
+{
+  const float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
+  if (magnitude > 1e-6f) {
+    dx /= magnitude;
+    dy /= magnitude;
+    dz /= magnitude;
+  }
+}
+
 struct LanePoint
 {
   // Construct a new instance filling all elements by `0.0f`.
@@ -103,17 +114,15 @@ struct LanePoint
     float new_dy = other.y_ - y_;
     float new_dz = other.z_ - z_;
 
-    // Normalize the direction vector
-    float magnitude = std::sqrt(new_dx * new_dx + new_dy * new_dy + new_dz * new_dz);
-    if (magnitude > 1e-6f) {
-      new_dx /= magnitude;
-      new_dy /= magnitude;
-      new_dz /= magnitude;
-    } else {
+    // Check if points are too close
+    const float magnitude_sq = new_dx * new_dx + new_dy * new_dy + new_dz * new_dz;
+    if (magnitude_sq < 1e-12f) {
       // If points are too close, use the first point's direction
       new_dx = dx_;
       new_dy = dy_;
       new_dz = dz_;
+    } else {
+      normalize_direction(new_dx, new_dy, new_dz);
     }
 
     // Interpolate label

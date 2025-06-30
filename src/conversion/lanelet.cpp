@@ -111,16 +111,12 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
     float dx = points[to_idx].x() - points[from_idx].x();
     float dy = points[to_idx].y() - points[from_idx].y();
     float dz = points[to_idx].z() - points[from_idx].z();
-    float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
 
-    if (magnitude > 1e-6f) {
-      dx /= magnitude;
-      dy /= magnitude;
-      dz /= magnitude;
-      points[point_idx] = LanePoint(
-        points[point_idx].x(), points[point_idx].y(), points[point_idx].z(),
-        dx, dy, dz, points[point_idx].label());
-    }
+    normalize_direction(dx, dy, dz);
+
+    points[point_idx] = LanePoint(
+      points[point_idx].x(), points[point_idx].y(), points[point_idx].z(),
+      dx, dy, dz, points[point_idx].label());
   };
 
   if (result.size() > 1) {
@@ -254,23 +250,18 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
         distance > distance_threshold) {
       continue;
     }
-    double dx{0.0};
-    double dy{0.0};
-    double dz{0.0};
-    constexpr double epsilon = 1e-6;
+    float dx{0.0f};
+    float dy{0.0f};
+    float dz{0.0f};
     if (itr == linestring.begin()) {
-      dx = 0.0;
-      dy = 0.0;
-      dz = 0.0;
+      dx = 0.0f;
+      dy = 0.0f;
+      dz = 0.0f;
     } else {
-      dx = itr->x() - (itr - 1)->x();
-      dy = itr->y() - (itr - 1)->y();
-      dz = itr->z() - (itr - 1)->z();
-      auto norm = std::hypot(dx, dy, dz);
-      norm = (norm > epsilon) ? norm : 1.0;
-      dx /= (norm);
-      dy /= (norm);
-      dz /= (norm);
+      dx = static_cast<float>(itr->x() - (itr - 1)->x());
+      dy = static_cast<float>(itr->y() - (itr - 1)->y());
+      dz = static_cast<float>(itr->z() - (itr - 1)->z());
+      normalize_direction(dx, dy, dz);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
@@ -303,23 +294,18 @@ std::vector<LanePoint> LaneletConverter::from_polygon(
         distance > distance_threshold) {
       continue;
     }
-    double dx{0.0};
-    double dy{0.0};
-    double dz{0.0};
-    constexpr double epsilon = 1e-6;
+    float dx{0.0f};
+    float dy{0.0f};
+    float dz{0.0f};
     if (itr == polygon.begin()) {
-      dx = 0.0;
-      dy = 0.0;
-      dz = 0.0;
+      dx = 0.0f;
+      dy = 0.0f;
+      dz = 0.0f;
     } else {
-      dx = itr->x() - (itr - 1)->x();
-      dy = itr->y() - (itr - 1)->y();
-      dz = itr->z() - (itr - 1)->z();
-      auto norm = std::hypot(dx, dy, dz);
-      norm = (norm > epsilon) ? norm : 1.0;
-      dx /= (norm);
-      dy /= (norm);
-      dz /= (norm);
+      dx = static_cast<float>(itr->x() - (itr - 1)->x());
+      dy = static_cast<float>(itr->y() - (itr - 1)->y());
+      dz = static_cast<float>(itr->z() - (itr - 1)->z());
+      normalize_direction(dx, dy, dz);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
