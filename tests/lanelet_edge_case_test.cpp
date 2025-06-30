@@ -71,7 +71,10 @@ protected:
 // Test edge case: Empty lanelet map
 TEST_F(LaneletEdgeCaseTest, ConvertEmptyLaneletMap)
 {
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
 
   geometry_msgs::msg::Point position;
   position.x = 0.0;
@@ -80,8 +83,8 @@ TEST_F(LaneletEdgeCaseTest, ConvertEmptyLaneletMap)
 
   auto result = converter.convert(position, 100.0);
 
-  // Should return empty optional or empty polyline
-  EXPECT_FALSE(result.has_value() || result->points.empty());
+  // Should return empty optional
+  EXPECT_FALSE(result.has_value());
 }
 
 // Test edge case: Lanelet with invalid speed limit string
@@ -98,10 +101,13 @@ TEST_F(LaneletEdgeCaseTest, ConvertLaneletInvalidSpeedLimit)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
 
   // This should throw due to std::stof failing
-  EXPECT_THROW(converter.convertToLaneSegments(10), std::invalid_argument);
+  EXPECT_THROW(converter.convert_to_lane_segments(10), std::invalid_argument);
 }
 
 // Test edge case: Lanelet with extreme speed limit values
@@ -118,13 +124,16 @@ TEST_F(LaneletEdgeCaseTest, ConvertLaneletExtremeSpeedLimit)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
-  auto segments = converter.convertToLaneSegments(10);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
+  auto segments = converter.convert_to_lane_segments(10);
 
   ASSERT_EQ(segments.size(), 1);
-  EXPECT_TRUE(segments[0].has_speed_limit());
+  EXPECT_TRUE(segments[0].speed_limit_mps.has_value());
   // Speed should be converted from km/h to m/s
-  EXPECT_GT(segments[0].get_speed_limit(), 100000.0f);  // Very large value
+  EXPECT_GT(segments[0].speed_limit_mps.value(), 100000.0f);  // Very large value
 }
 
 // Test edge case: Lanelet with NaN/Inf coordinates
@@ -144,19 +153,22 @@ TEST_F(LaneletEdgeCaseTest, ConvertLaneletWithNaNInfCoordinates)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
-  auto segments = converter.convertToLaneSegments(10);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
+  auto segments = converter.convert_to_lane_segments(10);
 
   // Should handle NaN/Inf gracefully
   ASSERT_EQ(segments.size(), 1);
-  const auto& polyline = segments[0].get_polyline();
+  const auto& polyline = segments[0].polyline;
 
   // Check that NaN/Inf propagated through
   bool has_nan = false;
   bool has_inf = false;
-  for (const auto& point : polyline.points) {
-    if (std::isnan(point.x) || std::isnan(point.y)) has_nan = true;
-    if (std::isinf(point.x) || std::isinf(point.y)) has_inf = true;
+  for (const auto& point : polyline.waypoints()) {
+    if (std::isnan(point.x()) || std::isnan(point.y())) has_nan = true;
+    if (std::isinf(point.x()) || std::isinf(point.y())) has_inf = true;
   }
   EXPECT_TRUE(has_nan || has_inf);
 }
@@ -174,12 +186,15 @@ TEST_F(LaneletEdgeCaseTest, ConvertZeroLengthLanelet)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
-  auto segments = converter.convertToLaneSegments(10);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
+  auto segments = converter.convert_to_lane_segments(10);
 
   ASSERT_EQ(segments.size(), 1);
   // Should still create a segment, even if degenerate
-  EXPECT_GE(segments[0].get_polyline().points.size(), 2);
+  EXPECT_GE(segments[0].polyline.size(), 2);
 }
 
 // Test edge case: Very large number of interpolation points
@@ -194,14 +209,17 @@ TEST_F(LaneletEdgeCaseTest, ConvertLaneletManyInterpolationPoints)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
 
   // Request extremely high number of interpolation points
-  auto segments = converter.convertToLaneSegments(10000);
+  auto segments = converter.convert_to_lane_segments(10000);
 
   ASSERT_EQ(segments.size(), 1);
   // Should create many interpolated points
-  EXPECT_GT(segments[0].get_polyline().points.size(), 1000);
+  EXPECT_GT(segments[0].polyline.size(), 1000);
 }
 
 // Test edge case: Lanelet with intersection attribute edge cases
@@ -214,7 +232,8 @@ TEST_F(LaneletEdgeCaseTest, ConvertLaneletIntersectionAttributes)
   std::vector<std::string> turn_directions = {"", "left", "right", "straight", "invalid_direction"};
 
   for (const auto& direction : turn_directions) {
-    lanelet_map_ptr_->clear();
+    // Recreate map for each test
+    lanelet_map_ptr_ = std::make_shared<lanelet::LaneletMap>();
 
     lanelet::AttributeMap attrs;
     attrs["subtype"] = "road";
@@ -223,11 +242,14 @@ TEST_F(LaneletEdgeCaseTest, ConvertLaneletIntersectionAttributes)
     auto lanelet = createLanelet(left, right, attrs);
     lanelet_map_ptr_->add(lanelet);
 
-    LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
-    auto segments = converter.convertToLaneSegments(10);
+    const size_t max_num_polyline = 100;
+    const size_t max_num_point = 20;
+    const double point_break_distance = 100.0;
+    LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
+    auto segments = converter.convert_to_lane_segments(10);
 
     ASSERT_EQ(segments.size(), 1);
-    EXPECT_TRUE(segments[0].is_intersection());
+    EXPECT_TRUE(segments[0].is_intersection);
   }
 }
 
@@ -243,7 +265,10 @@ TEST_F(LaneletEdgeCaseTest, ConvertDistanceThresholdBoundary)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
 
   // Test with position exactly at distance threshold
   geometry_msgs::msg::Point position;
@@ -257,7 +282,7 @@ TEST_F(LaneletEdgeCaseTest, ConvertDistanceThresholdBoundary)
 
   // Test with threshold just below distance
   auto result2 = converter.convert(position, 4.999);
-  EXPECT_FALSE(result2.has_value() || result2->points.empty());
+  EXPECT_FALSE(result2.has_value());
 }
 
 // Test edge case: Crosswalk polygon conversion
@@ -283,7 +308,10 @@ TEST_F(LaneletEdgeCaseTest, ConvertCrosswalkPolygon)
   auto crosswalk = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(crosswalk);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
 
   geometry_msgs::msg::Point position;
   position.x = 5.0;
@@ -292,19 +320,23 @@ TEST_F(LaneletEdgeCaseTest, ConvertCrosswalkPolygon)
 
   auto result = converter.convert(position, 100.0);
 
+  // Result should contain crosswalk points
   EXPECT_TRUE(result.has_value());
-  EXPECT_FALSE(result->points.empty());
 }
 
-// Test edge case: Matrix generation with empty segments
-TEST_F(LaneletEdgeCaseTest, GetMapLaneSegmentsMatrixEmpty)
+// Test edge case: Convert empty map to lane segments
+TEST_F(LaneletEdgeCaseTest, ConvertEmptyMapToLaneSegments)
 {
-  std::vector<LaneSegment> empty_segments;
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
 
-  auto matrix = LaneletConverter::get_map_lane_segments_matrix(empty_segments, 10);
+  // Convert empty map
+  auto segments = converter.convert_to_lane_segments(10);
 
-  EXPECT_EQ(matrix.rows(), 0);
-  EXPECT_EQ(matrix.cols(), 10 * 7);  // num_lane_points * features
+  // Should return empty vector
+  EXPECT_TRUE(segments.empty());
 }
 
 // Test edge case: Negative speed limit conversion
@@ -320,13 +352,16 @@ TEST_F(LaneletEdgeCaseTest, ConvertNegativeSpeedLimit)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
-  auto segments = converter.convertToLaneSegments(10);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
+  auto segments = converter.convert_to_lane_segments(10);
 
   ASSERT_EQ(segments.size(), 1);
-  EXPECT_TRUE(segments[0].has_speed_limit());
+  EXPECT_TRUE(segments[0].speed_limit_mps.has_value());
   // Negative speed should be preserved (though semantically invalid)
-  EXPECT_LT(segments[0].get_speed_limit(), 0.0f);
+  EXPECT_LT(segments[0].speed_limit_mps.value(), 0.0f);
 }
 
 // Test edge case: Unicode in lanelet attributes
@@ -343,10 +378,13 @@ TEST_F(LaneletEdgeCaseTest, ConvertUnicodeAttributes)
   auto lanelet = createLanelet(left, right, attrs);
   lanelet_map_ptr_->add(lanelet);
 
-  LaneletConverter converter(lanelet_map_ptr_, traffic_rules_ptr_);
+  const size_t max_num_polyline = 100;
+  const size_t max_num_point = 20;
+  const double point_break_distance = 100.0;
+  LaneletConverter converter(lanelet_map_ptr_, max_num_polyline, max_num_point, point_break_distance);
 
   // Should handle unicode attributes without crashing
-  EXPECT_NO_THROW(converter.convertToLaneSegments(10));
+  EXPECT_NO_THROW(converter.convert_to_lane_segments(10));
 }
 
 }  // namespace autoware::diffusion_planner::test

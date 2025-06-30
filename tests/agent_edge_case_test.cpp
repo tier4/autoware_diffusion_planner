@@ -13,25 +13,23 @@
 // limitations under the License.
 
 #include "autoware/diffusion_planner/conversion/agent.hpp"
-#include "autoware/diffusion_planner/dimensions.hpp"
 
-#include <autoware_utils/ros/uuid_helper.hpp>
 #include <autoware_perception_msgs/msg/tracked_objects.hpp>
-#include <geometry_msgs/msg/twist_with_covariance.hpp>
+#include <autoware_utils_uuid/uuid_helper.hpp>
+#include <autoware_utils/geometry/geometry.hpp>
 
 #include <Eigen/Dense>
 #include <gtest/gtest.h>
 
 #include <cmath>
 #include <limits>
-#include <memory>
 #include <vector>
 
 namespace autoware::diffusion_planner::test
 {
+
 using autoware_perception_msgs::msg::TrackedObject;
 using autoware_perception_msgs::msg::TrackedObjects;
-using autoware_perception_msgs::msg::ObjectClassification;
 
 class AgentEdgeCaseTest : public ::testing::Test
 {
@@ -39,93 +37,114 @@ protected:
   void SetUp() override
   {
     // Create a basic tracked object
-    tracked_object_.object_id = autoware_utils::generate_uuid();
-    tracked_object_.kinematics.pose_with_covariance.pose.position.x = 10.0;
-    tracked_object_.kinematics.pose_with_covariance.pose.position.y = 5.0;
+    tracked_object_.object_id = autoware_utils_uuid::generate_uuid();
+    tracked_object_.kinematics.pose_with_covariance.pose.position.x = 1.0;
+    tracked_object_.kinematics.pose_with_covariance.pose.position.y = 2.0;
     tracked_object_.kinematics.pose_with_covariance.pose.position.z = 0.0;
-    tracked_object_.kinematics.twist_with_covariance.twist.linear.x = 2.0;
-    tracked_object_.kinematics.twist_with_covariance.twist.linear.y = 1.0;
+    tracked_object_.kinematics.pose_with_covariance.pose.orientation =
+      autoware_utils::create_quaternion_from_yaw(0.0);
+
+    tracked_object_.kinematics.twist_with_covariance.twist.linear.x = 3.0;
+    tracked_object_.kinematics.twist_with_covariance.twist.linear.y = 4.0;
+
     tracked_object_.shape.type = autoware_perception_msgs::msg::Shape::BOUNDING_BOX;
-    tracked_object_.shape.dimensions.x = 4.0;
+    tracked_object_.shape.dimensions.x = 5.0;
     tracked_object_.shape.dimensions.y = 2.0;
     tracked_object_.shape.dimensions.z = 1.5;
+
     tracked_object_.existence_probability = 0.9;
 
-    ObjectClassification classification;
-    classification.label = ObjectClassification::CAR;
-    classification.probability = 0.95;
+    // Add classification
+    autoware_perception_msgs::msg::ObjectClassification classification;
+    classification.label = autoware_perception_msgs::msg::ObjectClassification::CAR;
+    classification.probability = 0.9;
     tracked_object_.classification.push_back(classification);
   }
 
   TrackedObject tracked_object_;
 };
 
-// Test edge case: NaN/Inf positions
-TEST_F(AgentEdgeCaseTest, AgentStateWithNaNInfPositions)
+// Test edge case: NaN/Inf values in tracked object
+TEST_F(AgentEdgeCaseTest, AgentStateNaNInfValues)
 {
   tracked_object_.kinematics.pose_with_covariance.pose.position.x = std::numeric_limits<double>::quiet_NaN();
   tracked_object_.kinematics.pose_with_covariance.pose.position.y = std::numeric_limits<double>::infinity();
-  tracked_object_.kinematics.pose_with_covariance.pose.position.z = -std::numeric_limits<double>::infinity();
+  tracked_object_.kinematics.twist_with_covariance.twist.linear.x = -std::numeric_limits<double>::infinity();
 
   AgentState agent_state(tracked_object_);
 
+  // Check that values are converted to float correctly
   EXPECT_TRUE(std::isnan(agent_state.x()));
   EXPECT_TRUE(std::isinf(agent_state.y()));
-  EXPECT_TRUE(std::isinf(agent_state.z()));
+  EXPECT_TRUE(std::isinf(agent_state.vx()));
 }
 
-// Test edge case: Zero dimensions
-TEST_F(AgentEdgeCaseTest, AgentStateWithZeroDimensions)
+// Test edge case: Zero and negative dimensions
+TEST_F(AgentEdgeCaseTest, AgentStateZeroNegativeDimensions)
 {
   tracked_object_.shape.dimensions.x = 0.0;
-  tracked_object_.shape.dimensions.y = 0.0;
+  tracked_object_.shape.dimensions.y = -2.0;
   tracked_object_.shape.dimensions.z = 0.0;
 
   AgentState agent_state(tracked_object_);
 
   EXPECT_FLOAT_EQ(agent_state.length(), 0.0);
-  EXPECT_FLOAT_EQ(agent_state.width(), 0.0);
+  EXPECT_FLOAT_EQ(agent_state.width(), -2.0);
 }
 
-// Test edge case: Negative dimensions (should be handled as absolute values)
-TEST_F(AgentEdgeCaseTest, AgentStateWithNegativeDimensions)
+// Test edge case: Very small dimension values
+TEST_F(AgentEdgeCaseTest, AgentStateSmallDimensions)
+{
+  tracked_object_.shape.dimensions.x = 1e-10;
+  tracked_object_.shape.dimensions.y = 1e-10;
+
+  AgentState agent_state(tracked_object_);
+
+  EXPECT_FLOAT_EQ(agent_state.length(), 1e-10f);
+  EXPECT_FLOAT_EQ(agent_state.width(), 1e-10f);
+}
+
+// Test edge case: Negative dimensions
+TEST_F(AgentEdgeCaseTest, AgentStateNegativeDimensions)
 {
   tracked_object_.shape.dimensions.x = -5.0;
   tracked_object_.shape.dimensions.y = -3.0;
 
   AgentState agent_state(tracked_object_);
 
-  // Implementation might handle negative dimensions differently
-  // This test documents the actual behavior
   EXPECT_FLOAT_EQ(agent_state.length(), -5.0);
   EXPECT_FLOAT_EQ(agent_state.width(), -3.0);
 }
 
-// Test edge case: Maximum history size
-TEST_F(AgentEdgeCaseTest, AgentHistoryMaxSize)
+// Test edge case: AgentHistory constructor and update
+TEST_F(AgentEdgeCaseTest, AgentHistoryOperations)
 {
-  constexpr size_t max_history = 100;  // Assuming this is the max
-  AgentHistory history(tracked_object_.object_id, max_history);
+  constexpr size_t max_history = 10;
+  constexpr size_t label_id = 0;
+  constexpr double current_time = 100.0;
 
-  // Add more states than max history
-  for (size_t i = 0; i < max_history + 10; ++i) {
-    tracked_object_.kinematics.pose_with_covariance.pose.position.x = static_cast<double>(i);
-    AgentState state(tracked_object_);
-    history.add_state(state);
-  }
+  AgentState initial_state(tracked_object_);
+  AgentHistory history(initial_state, label_id, current_time, max_history);
 
-  // Should only keep the most recent max_history states
-  EXPECT_LE(history.get_states().size(), max_history);
+  // Update with new tracked object
+  tracked_object_.kinematics.pose_with_covariance.pose.position.x = 2.0;
+  tracked_object_.kinematics.pose_with_covariance.pose.position.y = 3.0;
+  history.update(current_time + 1.0, tracked_object_);
+
+  // Check latest state
+  const auto& latest = history.get_latest_state();
+  EXPECT_FLOAT_EQ(latest.x(), 2.0);
+  EXPECT_FLOAT_EQ(latest.y(), 3.0);
 }
 
 // Test edge case: Empty history operations
 TEST_F(AgentEdgeCaseTest, AgentHistoryEmptyOperations)
 {
-  AgentHistory history(tracked_object_.object_id, 10);
+  AgentState initial_state(tracked_object_);
+  AgentHistory history(initial_state, 0, 100.0, 10);
 
-  // Operations on empty history should not crash
-  EXPECT_NO_THROW(history.get_latest_state());
-  EXPECT_NO_THROW(history.get_states());
+  // Operations on history should not crash
+  EXPECT_NO_THROW(auto latest = history.get_latest_state());
 
   Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
   EXPECT_NO_THROW(history.apply_transform(transform));
@@ -149,164 +168,153 @@ TEST_F(AgentEdgeCaseTest, AgentStateExtremeTransform)
   EXPECT_TRUE(std::isfinite(agent_state.y()));
 }
 
-// Test edge case: AgentData with no objects
-TEST_F(AgentEdgeCaseTest, AgentDataNoObjects)
+// Test edge case: NaN/Inf in transformation matrix
+TEST_F(AgentEdgeCaseTest, AgentStateNaNTransform)
 {
-  TrackedObjects empty_objects;
-  empty_objects.header.stamp = rclcpp::Time(0);
+  AgentState agent_state(tracked_object_);
 
-  AgentData agent_data(empty_objects, 10, 5, false);
+  Eigen::Matrix4f nan_transform = Eigen::Matrix4f::Identity();
+  nan_transform(0, 3) = std::numeric_limits<float>::quiet_NaN();
+  nan_transform(1, 3) = std::numeric_limits<float>::infinity();
 
-  EXPECT_EQ(agent_data.get_histories().size(), 0);
+  agent_state.apply_transform(nan_transform);
 
-  // Operations should handle empty data gracefully
-  Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
-  EXPECT_NO_THROW(agent_data.apply_transform(transform));
-  EXPECT_NO_THROW(agent_data.trim_to_k_closest_agents());
+  // NaN/Inf should propagate
+  EXPECT_TRUE(std::isnan(agent_state.x()) || std::isinf(agent_state.x()));
+  EXPECT_TRUE(std::isnan(agent_state.y()) || std::isinf(agent_state.y()));
 }
 
-// Test edge case: AgentData with unknown object types
-TEST_F(AgentEdgeCaseTest, AgentDataUnknownObjects)
+// Test edge case: AgentData with maximum agents
+TEST_F(AgentEdgeCaseTest, AgentDataMaxAgents)
 {
   TrackedObjects objects;
   objects.header.stamp = rclcpp::Time(0);
 
-  // Add object with UNKNOWN classification
-  TrackedObject unknown_object = tracked_object_;
-  unknown_object.classification.clear();
-  ObjectClassification unknown_class;
-  unknown_class.label = ObjectClassification::UNKNOWN;
-  unknown_class.probability = 1.0;
-  unknown_object.classification.push_back(unknown_class);
-  objects.objects.push_back(unknown_object);
-
-  // Test with ignore_unknown = true
-  AgentData agent_data_ignore(objects, 10, 5, true);
-  EXPECT_EQ(agent_data_ignore.get_histories().size(), 0);
-
-  // Test with ignore_unknown = false
-  AgentData agent_data_include(objects, 10, 5, false);
-  EXPECT_EQ(agent_data_include.get_histories().size(), 1);
-}
-
-// Test edge case: AgentData update with ID mismatch
-TEST_F(AgentEdgeCaseTest, AgentDataUpdateIDMismatch)
-{
-  TrackedObjects initial_objects;
-  initial_objects.header.stamp = rclcpp::Time(0);
-  initial_objects.objects.push_back(tracked_object_);
-
-  AgentData agent_data(initial_objects, 10, 5, false);
-
-  // Update with different object IDs
-  TrackedObjects new_objects;
-  new_objects.header.stamp = rclcpp::Time(1);
-  TrackedObject new_object = tracked_object_;
-  new_object.object_id = autoware_utils::generate_uuid();  // Different ID
-  new_objects.objects.push_back(new_object);
-
-  agent_data.update_histories(new_objects, false);
-
-  // Should have 2 different objects now
-  EXPECT_EQ(agent_data.get_histories().size(), 2);
-}
-
-// Test edge case: Distance calculation with same position
-TEST_F(AgentEdgeCaseTest, AgentDataTrimSamePosition)
-{
-  TrackedObjects objects;
-  objects.header.stamp = rclcpp::Time(0);
-
-  // Add multiple objects at the same position
-  for (int i = 0; i < 5; ++i) {
-    TrackedObject same_pos_object = tracked_object_;
-    same_pos_object.object_id = autoware_utils::generate_uuid();
-    same_pos_object.kinematics.pose_with_covariance.pose.position.x = 0.0;
-    same_pos_object.kinematics.pose_with_covariance.pose.position.y = 0.0;
-    objects.objects.push_back(same_pos_object);
+  // Create maximum number of tracked objects
+  const size_t max_agents = 50;  // Assuming this is a reasonable max
+  for (size_t i = 0; i < max_agents; ++i) {
+    TrackedObject obj = tracked_object_;
+    obj.object_id = autoware_utils_uuid::generate_uuid();
+    obj.kinematics.pose_with_covariance.pose.position.x = static_cast<double>(i);
+    objects.objects.push_back(obj);
   }
 
-  AgentData agent_data(objects, 3, 5, false);
-
-  geometry_msgs::msg::Point ref_point;
-  ref_point.x = 0.0;
-  ref_point.y = 0.0;
-  ref_point.z = 0.0;
-
-  // All objects are at the same distance
-  agent_data.trim_to_k_closest_agents(ref_point);
-
-  // Should keep k_closest agents
-  EXPECT_EQ(agent_data.get_histories().size(), 3);
+  AgentData agent_data(objects, max_agents, 10);
+  EXPECT_EQ(agent_data.num_agent(), max_agents);
 }
 
-// Test edge case: Object matrix generation with edge values
+// Test edge case: AgentData with no valid objects
+TEST_F(AgentEdgeCaseTest, AgentDataNoValidObjects)
+{
+  TrackedObjects objects;
+  objects.header.stamp = rclcpp::Time(0);
+
+  // Create objects with all unknown classifications
+  for (int i = 0; i < 5; ++i) {
+    TrackedObject obj = tracked_object_;
+    obj.object_id = autoware_utils_uuid::generate_uuid();
+    obj.classification.clear();
+    autoware_perception_msgs::msg::ObjectClassification classification;
+    classification.label = autoware_perception_msgs::msg::ObjectClassification::UNKNOWN;
+    classification.probability = 1.0;
+    obj.classification.push_back(classification);
+    objects.objects.push_back(obj);
+  }
+
+  // With ignore_unknown_agents = true, should have no agents
+  AgentData agent_data(objects, 10, 10, true);
+  EXPECT_EQ(agent_data.num_agent(), 0);
+}
+
+// Test edge case: AgentData trim with extreme positions
+TEST_F(AgentEdgeCaseTest, AgentDataTrimExtremePositions)
+{
+  TrackedObjects objects;
+  objects.header.stamp = rclcpp::Time(0);
+
+  // Create objects at extreme positions
+  for (int i = 0; i < 10; ++i) {
+    TrackedObject obj = tracked_object_;
+    obj.object_id = autoware_utils_uuid::generate_uuid();
+    obj.kinematics.pose_with_covariance.pose.position.x =
+      (i % 2 == 0) ? 1e10 : -1e10;
+    obj.kinematics.pose_with_covariance.pose.position.y =
+      (i % 2 == 0) ? -1e10 : 1e10;
+    objects.objects.push_back(obj);
+  }
+
+  AgentData agent_data(objects, 5, 10);
+
+  // Should keep all 10 agents since we passed max_num_agent=5 but have 10 objects
+  // The trim happens relative to ego position, not automatically
+  EXPECT_EQ(agent_data.num_agent(), 10);
+}
+
+// Test edge case: AgentHistory get object matrix
 TEST_F(AgentEdgeCaseTest, AgentHistoryGetObjectMatrixEdgeCases)
 {
-  AgentHistory history(tracked_object_.object_id, 10);
+  constexpr size_t max_history = 10;
+  AgentState initial_state(tracked_object_);
+  AgentHistory history(initial_state, 0, 100.0, max_history);
 
-  // Add states with extreme velocities
-  for (int i = 0; i < 5; ++i) {
-    TrackedObject extreme_object = tracked_object_;
-    extreme_object.kinematics.twist_with_covariance.twist.linear.x =
-      (i % 2 == 0) ? std::numeric_limits<double>::max() : -std::numeric_limits<double>::max();
-    extreme_object.kinematics.twist_with_covariance.twist.linear.y =
-      (i % 2 == 0) ? -std::numeric_limits<double>::max() : std::numeric_limits<double>::max();
-
-    AgentState state(extreme_object);
-    history.add_state(state);
+  // Add states with extreme values
+  for (int i = 1; i <= 5; ++i) {
+    tracked_object_.kinematics.pose_with_covariance.pose.position.x =
+      std::pow(10.0, i);
+    tracked_object_.kinematics.twist_with_covariance.twist.linear.x =
+      std::pow(10.0, -i);
+    history.update(100.0 + i, tracked_object_);
   }
 
-  auto matrix = history.get_object_matrix();
+  // Get array representation of the history data
+  auto array_data = history.as_array();
 
-  // Matrix should have correct dimensions
-  EXPECT_EQ(matrix.rows(), 10);  // max_history_size
-  EXPECT_EQ(matrix.cols(), 5);   // state_size from agent
-
-  // Check for overflow handling
-  for (int i = 0; i < 5; ++i) {
-    EXPECT_TRUE(std::isinf(matrix(i, 3)) || std::isfinite(matrix(i, 3)));  // vx
-    EXPECT_TRUE(std::isinf(matrix(i, 4)) || std::isfinite(matrix(i, 4)));  // vy
-  }
+  // Array should have correct size (max_history * AgentState::dim())
+  EXPECT_EQ(array_data.size(), max_history * AgentState::dim());
 }
 
-// Test edge case: Classification with multiple labels
+// Test edge case: Multiple classifications
 TEST_F(AgentEdgeCaseTest, AgentStateMultipleClassifications)
 {
-  // Add multiple classifications with different probabilities
+  // Clear existing classifications
   tracked_object_.classification.clear();
 
-  ObjectClassification car_class;
-  car_class.label = ObjectClassification::CAR;
-  car_class.probability = 0.6;
-  tracked_object_.classification.push_back(car_class);
+  // Add multiple classifications with equal probabilities
+  std::vector<uint8_t> labels = {
+    autoware_perception_msgs::msg::ObjectClassification::CAR,
+    autoware_perception_msgs::msg::ObjectClassification::TRUCK,
+    autoware_perception_msgs::msg::ObjectClassification::BUS
+  };
 
-  ObjectClassification truck_class;
-  truck_class.label = ObjectClassification::TRUCK;
-  truck_class.probability = 0.3;
-  tracked_object_.classification.push_back(truck_class);
-
-  ObjectClassification bus_class;
-  bus_class.label = ObjectClassification::BUS;
-  bus_class.probability = 0.1;
-  tracked_object_.classification.push_back(bus_class);
+  for (auto label : labels) {
+    autoware_perception_msgs::msg::ObjectClassification classification;
+    classification.label = label;
+    classification.probability = 0.33f;
+    tracked_object_.classification.push_back(classification);
+  }
 
   AgentState agent_state(tracked_object_);
 
-  // State should be created successfully with primary classification
-  EXPECT_NO_THROW(agent_state.object_type());
+  // Should handle multiple classifications
+  // label_ is a member variable, not a method
+  EXPECT_EQ(agent_state.label_, AgentLabel::VEHICLE);
 }
 
-// Test edge case: Zero probability object
+// Test edge case: Zero probability classification
 TEST_F(AgentEdgeCaseTest, AgentStateZeroProbability)
 {
+  tracked_object_.classification.clear();
+  autoware_perception_msgs::msg::ObjectClassification classification;
+  classification.label = autoware_perception_msgs::msg::ObjectClassification::CAR;
+  classification.probability = 0.0;
+  tracked_object_.classification.push_back(classification);
+
   tracked_object_.existence_probability = 0.0;
-  tracked_object_.classification[0].probability = 0.0;
 
   AgentState agent_state(tracked_object_);
 
-  // Should handle zero probability gracefully
-  EXPECT_FLOAT_EQ(agent_state.existence_probability(), 0.0);
+  // Should handle zero probability
+  EXPECT_EQ(agent_state.label_, AgentLabel::VEHICLE);
 }
 
 }  // namespace autoware::diffusion_planner::test

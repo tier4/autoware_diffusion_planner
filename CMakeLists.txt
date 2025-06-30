@@ -64,6 +64,9 @@ endif()
 # Add compile option to suppress deprecation warnings (optional)
 add_compile_options(-Wno-deprecated-declarations)
 
+# Suppress narrowing conversion warnings from TensorRT headers
+add_compile_options(-Wno-narrowing)
+
 # Add your component library
 ament_auto_add_library(autoware_diffusion_planner_component SHARED
   src/diffusion_planner_node.cpp

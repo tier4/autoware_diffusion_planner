@@ -16,7 +16,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/node_options.hpp>
-#include <autoware_utils/ros/uuid_helper.hpp>
+#include <autoware_utils_uuid/uuid_helper.hpp>
 #include <autoware_perception_msgs/msg/tracked_objects.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
@@ -38,7 +38,9 @@ class DiffusionPlannerIntegrationTest : public ::testing::Test
 protected:
   void SetUp() override
   {
-    rclcpp::init(0, nullptr);
+    if (!rclcpp::ok()) {
+      rclcpp::init(0, nullptr);
+    }
 
     // Create node with test parameters
     rclcpp::NodeOptions options;
@@ -63,7 +65,7 @@ protected:
   TrackedObject createTestObject(double x, double y, double vx, double vy)
   {
     TrackedObject obj;
-    obj.object_id = autoware_utils::generate_uuid();
+    obj.object_id = autoware_utils_uuid::generate_uuid();
     obj.kinematics.pose_with_covariance.pose.position.x = x;
     obj.kinematics.pose_with_covariance.pose.position.y = y;
     obj.kinematics.pose_with_covariance.pose.position.z = 0.0;
