@@ -105,6 +105,24 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
   result.push_back(input.back());
 
   // Recalculate direction vectors based on actual interpolated positions
+  // Handle first point direction
+  if (result.size() > 1) {
+    float dx = result[1].x() - result[0].x();
+    float dy = result[1].y() - result[0].y();
+    float dz = result[1].z() - result[0].z();
+    float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (magnitude > 1e-6f) {
+      dx /= magnitude;
+      dy /= magnitude;
+      dz /= magnitude;
+      result[0] = LanePoint(
+        result[0].x(), result[0].y(), result[0].z(),
+        dx, dy, dz, result[0].label());
+    }
+  }
+
+  // Handle middle points
   for (size_t i = 1; i < result.size() - 1; ++i) {
     float dx = result[i + 1].x() - result[i].x();
     float dy = result[i + 1].y() - result[i].y();
