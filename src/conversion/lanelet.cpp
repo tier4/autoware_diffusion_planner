@@ -60,28 +60,49 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
 
   // Step 2: Generate target arc lengths
   std::vector<float> target_lengths(num_points);
-  float step = total_length / static_cast<float>(num_points - 1);
-  for (size_t i = 0; i < num_points; ++i) {
-    target_lengths[i] = static_cast<float>(i) * step;
+  std::vector<LanePoint> result;
+  result.reserve(num_points);
+
+  // Always include the first point
+  result.push_back(input.front());
+
+  // Generate interior points
+  if (num_points == 2) {
+    // Always include the last point
+    result.push_back(input.back());
+    return result;
   }
 
-  // Step 3: Interpolate new points
-  std::vector<LanePoint> result;
+  float step = total_length / static_cast<float>(num_points - 1);
   size_t seg_idx = 0;
 
-  for (float target : target_lengths) {
-    // Move to the correct segment
+  for (size_t i = 1; i < num_points - 1; ++i) {
+    float target = static_cast<float>(i) * step;
+
+    // Find the correct segment containing the target arc length
     while (seg_idx + 1 < arc_lengths.size() && arc_lengths[seg_idx + 1] < target) {
       ++seg_idx;
+    }
+
+    // Ensure we don't go past the last segment
+    if (seg_idx >= arc_lengths.size() - 1) {
+      seg_idx = arc_lengths.size() - 2;
     }
 
     // Interpolate between input[seg_idx] and input[seg_idx + 1]
     float seg_start = arc_lengths[seg_idx];
     float seg_end = arc_lengths[seg_idx + 1];
-    float den = (seg_end - seg_start);
-    float t = (std::abs(den) > 1e-3) ? (target - seg_start) / den : 0.f;
+    float seg_length = seg_end - seg_start;
+
+    // Calculate interpolation parameter, handling zero-length segments
+    float safe_seg_length = std::max(seg_length, 1e-6f);
+    float t = (target - seg_start) / safe_seg_length;
+    // Clamp t to [0, 1] to ensure we don't extrapolate
+    t = std::max(0.0f, std::min(1.0f, t));
     result.push_back(input[seg_idx].lerp(input[seg_idx + 1], t));
   }
+  // Always include the last point
+  result.push_back(input.back());
 
   return result;
 }
