@@ -14,6 +14,8 @@
 
 #include "autoware/diffusion_planner/conversion/ego.hpp"
 
+#include "autoware/diffusion_planner/constants.hpp"
+
 namespace autoware::diffusion_planner
 {
 EgoState::EgoState(
@@ -24,8 +26,7 @@ EgoState::EgoState(
   const auto & ang = kinematic_state_msg.twist.twist.angular;
 
   const float linear_vel = std::hypot(lin.x, lin.y);
-  constexpr float moving_velocity_threshold_mps{0.2};
-  if (linear_vel < moving_velocity_threshold_mps) {
+  if (linear_vel < constants::MOVING_VELOCITY_THRESHOLD_MPS) {
     yaw_rate_ = 0.0f;
     steering_angle_ = 0.0f;
   } else {
