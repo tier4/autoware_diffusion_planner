@@ -104,6 +104,42 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
   // Always include the last point
   result.push_back(input.back());
 
+  // Recalculate direction vectors based on actual interpolated positions
+  for (size_t i = 1; i < result.size() - 1; ++i) {
+    float dx = result[i + 1].x() - result[i].x();
+    float dy = result[i + 1].y() - result[i].y();
+    float dz = result[i + 1].z() - result[i].z();
+    float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (magnitude > 1e-6f) {
+      dx /= magnitude;
+      dy /= magnitude;
+      dz /= magnitude;
+      // Create new point with corrected direction
+      result[i] = LanePoint(
+        result[i].x(), result[i].y(), result[i].z(),
+        dx, dy, dz, result[i].label());
+    }
+  }
+
+  // Handle last point direction
+  if (result.size() > 1) {
+    size_t last_idx = result.size() - 1;
+    float dx = result[last_idx].x() - result[last_idx - 1].x();
+    float dy = result[last_idx].y() - result[last_idx - 1].y();
+    float dz = result[last_idx].z() - result[last_idx - 1].z();
+    float magnitude = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    if (magnitude > 1e-6f) {
+      dx /= magnitude;
+      dy /= magnitude;
+      dz /= magnitude;
+      result[last_idx] = LanePoint(
+        result[last_idx].x(), result[last_idx].y(), result[last_idx].z(),
+        dx, dy, dz, result[last_idx].label());
+    }
+  }
+
   return result;
 }
 
