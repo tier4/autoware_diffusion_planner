@@ -64,11 +64,8 @@ TEST_F(PreprocessingUtilsEdgeCaseTest, NormalizeExtremeValues)
   preprocess::NormalizationMap normalization_map;
 
   input_data_map["f"] = {
-    std::numeric_limits<float>::max(),
-    std::numeric_limits<float>::min(),
-    -std::numeric_limits<float>::max(),
-    std::numeric_limits<float>::epsilon()
-  };
+    std::numeric_limits<float>::max(), std::numeric_limits<float>::min(),
+    -std::numeric_limits<float>::max(), std::numeric_limits<float>::epsilon()};
   normalization_map["f"] = {{0.0f}, {1.0f}};
 
   preprocess::normalize_input_data(input_data_map, normalization_map);
@@ -87,11 +84,8 @@ TEST_F(PreprocessingUtilsEdgeCaseTest, NormalizeNaNInfInput)
   preprocess::NormalizationMap normalization_map;
 
   input_data_map["f"] = {
-    std::numeric_limits<float>::quiet_NaN(),
-    std::numeric_limits<float>::infinity(),
-    -std::numeric_limits<float>::infinity(),
-    1.0f
-  };
+    std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+    -std::numeric_limits<float>::infinity(), 1.0f};
   normalization_map["f"] = {{0.0f}, {1.0f}};
 
   preprocess::normalize_input_data(input_data_map, normalization_map);
@@ -112,15 +106,10 @@ TEST_F(PreprocessingUtilsEdgeCaseTest, NormalizeNaNInfParameters)
   input_data_map["f"] = {1.0f, 2.0f, 3.0f};
   normalization_map["f"] = {
     {std::numeric_limits<float>::quiet_NaN(), 0.0f, std::numeric_limits<float>::infinity()},
-    {1.0f, std::numeric_limits<float>::infinity(), 0.0f}
-  };
+    {1.0f, std::numeric_limits<float>::infinity(), 0.0f}};
 
-  preprocess::normalize_input_data(input_data_map, normalization_map);
-
-  // Results should reflect the problematic normalization parameters
-  EXPECT_TRUE(std::isnan(input_data_map["f"][0]));  // (1-NaN)/1 = NaN
-  EXPECT_FLOAT_EQ(input_data_map["f"][1], 0.0f);    // (2-0)/Inf = 0
-  EXPECT_TRUE(std::isinf(input_data_map["f"][2]));  // (3-Inf)/0 = Inf
+  EXPECT_THROW(
+    preprocess::normalize_input_data(input_data_map, normalization_map), std::runtime_error);
 }
 
 // Test edge case: Very small standard deviation (near zero but not zero)
@@ -130,7 +119,8 @@ TEST_F(PreprocessingUtilsEdgeCaseTest, NormalizeVerySmallStdDev)
   preprocess::NormalizationMap normalization_map;
 
   input_data_map["f"] = {1.0f, 1.0001f};
-  normalization_map["f"] = {{1.0f, 1.0f}, {std::numeric_limits<float>::epsilon(), std::numeric_limits<float>::epsilon()}};
+  normalization_map["f"] = {
+    {1.0f, 1.0f}, {std::numeric_limits<float>::epsilon(), std::numeric_limits<float>::epsilon()}};
 
   preprocess::normalize_input_data(input_data_map, normalization_map);
 
@@ -219,12 +209,12 @@ TEST_F(PreprocessingUtilsEdgeCaseTest, NormalizeMultipleFeaturesOrder)
   preprocess::normalize_input_data(input_data_map, normalization_map);
 
   // Verify each feature is normalized independently
-  EXPECT_FLOAT_EQ(input_data_map["a"][0], 1.0f);  // (1-0)/1 = 1
-  EXPECT_FLOAT_EQ(input_data_map["a"][1], 2.0f);  // (2-0)/1 = 2
-  EXPECT_FLOAT_EQ(input_data_map["b"][0], 1.0f);  // (3-1)/2 = 1
-  EXPECT_FLOAT_EQ(input_data_map["b"][1], 1.5f);  // (4-1)/2 = 1.5
-  EXPECT_FLOAT_EQ(input_data_map["c"][0], 1.0f);  // (5-2)/3 = 1
-  EXPECT_FLOAT_EQ(input_data_map["c"][1], 4.0f/3.0f);  // (6-2)/3 = 4/3
+  EXPECT_FLOAT_EQ(input_data_map["a"][0], 1.0f);         // (1-0)/1 = 1
+  EXPECT_FLOAT_EQ(input_data_map["a"][1], 2.0f);         // (2-0)/1 = 2
+  EXPECT_FLOAT_EQ(input_data_map["b"][0], 1.0f);         // (3-1)/2 = 1
+  EXPECT_FLOAT_EQ(input_data_map["b"][1], 1.5f);         // (4-1)/2 = 1.5
+  EXPECT_FLOAT_EQ(input_data_map["c"][0], 1.0f);         // (5-2)/3 = 1
+  EXPECT_FLOAT_EQ(input_data_map["c"][1], 4.0f / 3.0f);  // (6-2)/3 = 4/3
 }
 
 // Test edge case: Row-wise operations with partial zero rows
@@ -234,9 +224,9 @@ TEST_F(PreprocessingUtilsEdgeCaseTest, NormalizePartialZeroRows)
   preprocess::NormalizationMap normalization_map;
 
   // 3 rows, 2 cols - middle row has one zero
-  input_data_map["f"] = {1.0f, 2.0f,    // row 0: non-zero
-                         0.0f, 3.0f,    // row 1: partial zero
-                         0.0f, 0.0f};   // row 2: all zero
+  input_data_map["f"] = {1.0f, 2.0f,   // row 0: non-zero
+                         0.0f, 3.0f,   // row 1: partial zero
+                         0.0f, 0.0f};  // row 2: all zero
   normalization_map["f"] = {{1.0f, 1.0f}, {1.0f, 1.0f}};
 
   preprocess::normalize_input_data(input_data_map, normalization_map);
@@ -246,8 +236,8 @@ TEST_F(PreprocessingUtilsEdgeCaseTest, NormalizePartialZeroRows)
   EXPECT_FLOAT_EQ(input_data_map["f"][1], 1.0f);  // (2-1)/1 = 1
 
   // Second row: normalized normally (not all zeros)
-  EXPECT_FLOAT_EQ(input_data_map["f"][2], -1.0f); // (0-1)/1 = -1
-  EXPECT_FLOAT_EQ(input_data_map["f"][3], 2.0f);  // (3-1)/1 = 2
+  EXPECT_FLOAT_EQ(input_data_map["f"][2], -1.0f);  // (0-1)/1 = -1
+  EXPECT_FLOAT_EQ(input_data_map["f"][3], 2.0f);   // (3-1)/1 = 2
 
   // Third row: should remain all zeros
   EXPECT_FLOAT_EQ(input_data_map["f"][4], 0.0f);

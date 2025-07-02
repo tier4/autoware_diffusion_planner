@@ -28,15 +28,18 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
   double y = msg.pose.pose.position.y;
   double z = msg.pose.pose.position.z;
 
-  // Extract orientation
-  double qx = msg.pose.pose.orientation.x;
-  double qy = msg.pose.pose.orientation.y;
-  double qz = msg.pose.pose.orientation.z;
-  double qw = msg.pose.pose.orientation.w;
-
   // Create Eigen quaternion and normalize it just in case
-  Eigen::Quaternionf q(qw, qx, qy, qz);
-  q.normalize();
+  Eigen::Quaternionf q = std::invoke([&msg]() -> Eigen::Quaternionf {
+    double qx = msg.pose.pose.orientation.x;
+    double qy = msg.pose.pose.orientation.y;
+    double qz = msg.pose.pose.orientation.z;
+    double qw = msg.pose.pose.orientation.w;
+
+    // Create Eigen quaternion and normalize it just in case
+    Eigen::Quaternionf q(qw, qx, qy, qz);
+    return (q.norm() < std::numeric_limits<float>::epsilon()) ? Eigen::Quaternionf::Identity()
+                                                              : q.normalized();
+  });
 
   // Rotation matrix (3x3)
   Eigen::Matrix3f R = q.toRotationMatrix();
@@ -60,7 +63,13 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
 std::vector<float> create_float_data(const std::vector<int64_t> & shape, float fill)
 {
   size_t total_size = 1;
-  for (auto dim : shape) total_size *= dim;
+  for (auto dim : shape) {
+    // Check for overflow before multiplication
+    if (dim > 0 && total_size > std::numeric_limits<size_t>::max() / static_cast<size_t>(dim)) {
+      throw std::overflow_error("Shape dimensions would cause size_t overflow");
+    }
+    total_size *= static_cast<size_t>(dim);
+  }
   std::vector<float> data(total_size, fill);
   return data;
 }

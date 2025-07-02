@@ -133,7 +133,15 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data(
     batch_size * agent_size * rows, cols);
   tensor_data.setZero();
-  std::memcpy(tensor_data.data(), prediction.data(), tensor_data.size() * sizeof(float));
+  
+  // Ensure prediction has enough data
+  const size_t required_size = tensor_data.size();
+  if (prediction.size() < required_size) {
+    throw std::runtime_error("Prediction vector size (" + std::to_string(prediction.size()) + 
+                           ") is smaller than required (" + std::to_string(required_size) + ")");
+  }
+  
+  std::memcpy(tensor_data.data(), prediction.data(), required_size * sizeof(float));
   return tensor_data;
 }
 
@@ -151,8 +159,17 @@ Eigen::MatrixXf get_prediction_matrix(
 
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data =
     get_tensor_data(prediction);
-  Eigen::MatrixXf prediction_matrix =
-    tensor_data.block(batch * agent_size * rows + agent * rows, 0, rows, cols);
+  // Validate indices before accessing block
+  const long start_row = batch * agent_size * rows + agent * rows;
+  if (start_row < 0 || start_row + rows > tensor_data.rows()) {
+    throw std::out_of_range("Invalid block access: start_row=" + std::to_string(start_row) + 
+                          ", rows=" + std::to_string(rows) + 
+                          ", tensor_rows=" + std::to_string(tensor_data.rows()));
+  }
+  
+  // Extract and copy the block to ensure we have a proper matrix, not just a view
+  Eigen::MatrixXf prediction_matrix = 
+    tensor_data.block(start_row, 0, rows, cols).eval();
 
   // Copy only the relevant part
   prediction_matrix.transposeInPlace();
