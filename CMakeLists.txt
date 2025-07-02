@@ -64,6 +64,9 @@ endif()
 # Add compile option to suppress deprecation warnings (optional)
 add_compile_options(-Wno-deprecated-declarations)
 
+# Suppress narrowing conversion warnings from TensorRT headers
+add_compile_options(-Wno-narrowing)
+
 # Add your component library
 ament_auto_add_library(autoware_diffusion_planner_component SHARED
   src/diffusion_planner_node.cpp
@@ -113,7 +116,12 @@ if(BUILD_TESTING)
     tests/postprocessing_utils_test.cpp
     tests/utils_test.cpp
     tests/marker_utils_test.cpp
-    tests/lanelet_integration_test.cpp)
+    tests/lanelet_integration_test.cpp
+    tests/postprocessing_utils_edge_case_test.cpp
+    tests/preprocessing_utils_edge_case_test.cpp
+    tests/agent_edge_case_test.cpp
+    tests/lanelet_edge_case_test.cpp
+    tests/diffusion_planner_integration_test.cpp)
 
   target_link_libraries(test_diffusion_planner autoware_diffusion_planner_component)
   ament_target_dependencies(test_diffusion_planner
