@@ -319,7 +319,7 @@ InputDataMap DiffusionPlanner::create_input_data()
       params_.keep_last_traffic_light_group_info);
     if (!traffic_signals) {
       RCLCPP_WARN_THROTTLE(
-        this->get_logger(), *this->get_clock(), 5000,
+        this->get_logger(), *this->get_clock(), constants::LOG_THROTTLE_INTERVAL_MS,
         "no traffic signal received. traffic light info will not be updated/used");
     }
   }
@@ -371,7 +371,8 @@ InputDataMap DiffusionPlanner::create_input_data()
       !route_handler_->isHandlerReady() || !route_handler_->getClosestPreferredLaneletWithinRoute(
                                              current_pose, &current_preferred_lane)) {
       RCLCPP_ERROR_STREAM_THROTTLE(
-        get_logger(), *this->get_clock(), 5000, "failed to find closest lanelet within route!!!");
+        get_logger(), *this->get_clock(), constants::LOG_THROTTLE_INTERVAL_MS,
+        "failed to find closest lanelet within route!!!");
       return {};
     }
     auto current_lanes = route_handler_->getLaneletSequence(
@@ -438,7 +439,8 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   auto route_lanes = input_data_map["route_lanes"];
 
   // Allocate bool array for lane speed limits
-  // Note: Using std::vector<uint8_t> instead of std::vector<bool> to ensure contiguous memory layout
+  // Note: Using std::vector<uint8_t> instead of std::vector<bool> to ensure contiguous memory
+  // layout
   size_t lane_speed_tensor_num_elements = std::accumulate(
     LANES_SPEED_LIMIT_SHAPE.begin(), LANES_SPEED_LIMIT_SHAPE.end(), 1, std::multiplies<>());
   std::vector<uint8_t> speed_bool_array(lane_speed_tensor_num_elements);
@@ -456,7 +458,8 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   CHECK_CUDA_ERROR(cudaMemcpy(
     static_objects_d_.get(), static_objects.data(), static_objects.size() * sizeof(float),
     cudaMemcpyHostToDevice));
-  CHECK_CUDA_ERROR(cudaMemcpy(lanes_d_.get(), lanes.data(), lanes.size() * sizeof(float), cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(
+    cudaMemcpy(lanes_d_.get(), lanes.data(), lanes.size() * sizeof(float), cudaMemcpyHostToDevice));
   CHECK_CUDA_ERROR(cudaMemcpy(
     lanes_speed_limit_d_.get(), lanes_speed_limit.data(), lanes_speed_limit.size() * sizeof(float),
     cudaMemcpyHostToDevice));
@@ -508,7 +511,9 @@ void DiffusionPlanner::on_timer()
   autoware_utils::ScopedTimeTrack st(__func__, *time_keeper_);
 
   if (!is_map_loaded_) {
-    RCLCPP_INFO_THROTTLE(get_logger(), *this->get_clock(), 5000, "Waiting for map data...");
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *this->get_clock(), constants::LOG_THROTTLE_INTERVAL_MS,
+      "Waiting for map data...");
     return;
   }
 
@@ -516,7 +521,8 @@ void DiffusionPlanner::on_timer()
   auto input_data_map = create_input_data();
   if (input_data_map.empty()) {
     RCLCPP_WARN_THROTTLE(
-      get_logger(), *this->get_clock(), 5000, "No input data available for inference");
+      get_logger(), *this->get_clock(), constants::LOG_THROTTLE_INTERVAL_MS,
+      "No input data available for inference");
     return;
   }
 
@@ -526,7 +532,8 @@ void DiffusionPlanner::on_timer()
   preprocess::normalize_input_data(input_data_map, normalization_map_);
   if (!utils::check_input_map(input_data_map)) {
     RCLCPP_WARN_THROTTLE(
-      get_logger(), *this->get_clock(), 5000, "Input data contains invalid values");
+      get_logger(), *this->get_clock(), constants::LOG_THROTTLE_INTERVAL_MS,
+      "Input data contains invalid values");
     return;
   }
   const auto predictions = do_inference_trt(input_data_map);
@@ -540,8 +547,7 @@ void DiffusionPlanner::on_map(const HADMapBin::ConstSharedPtr map_msg)
     *map_msg, lanelet_map_ptr_, &traffic_rules_ptr_, &routing_graph_ptr_);
 
   lanelet_converter_ptr_ = std::make_unique<LaneletConverter>(
-    lanelet_map_ptr_, 
-    constants::LaneletConverterParams::MAX_LANELETS,
+    lanelet_map_ptr_, constants::LaneletConverterParams::MAX_LANELETS,
     constants::LaneletConverterParams::MAX_POINTS_PER_LANE,
     constants::LaneletConverterParams::SEARCH_RADIUS_M);
   lane_segments_ = lanelet_converter_ptr_->convert_to_lane_segments(POINTS_PER_SEGMENT);

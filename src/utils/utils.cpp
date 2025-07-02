@@ -28,22 +28,18 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
   double y = msg.pose.pose.position.y;
   double z = msg.pose.pose.position.z;
 
-  // Extract orientation
-  double qx = msg.pose.pose.orientation.x;
-  double qy = msg.pose.pose.orientation.y;
-  double qz = msg.pose.pose.orientation.z;
-  double qw = msg.pose.pose.orientation.w;
-
   // Create Eigen quaternion and normalize it just in case
-  Eigen::Quaternionf q(qw, qx, qy, qz);
-  
-  // Check if quaternion is valid (non-zero)
-  if (q.norm() < std::numeric_limits<float>::epsilon()) {
-    // Use identity quaternion if invalid
-    q = Eigen::Quaternionf::Identity();
-  } else {
-    q.normalize();
-  }
+  Eigen::Quaternionf q = std::invoke([&msg]() -> Eigen::Quaternionf {
+    double qx = msg.pose.pose.orientation.x;
+    double qy = msg.pose.pose.orientation.y;
+    double qz = msg.pose.pose.orientation.z;
+    double qw = msg.pose.pose.orientation.w;
+
+    // Create Eigen quaternion and normalize it just in case
+    Eigen::Quaternionf q(qw, qx, qy, qz);
+    return (q.norm() < std::numeric_limits<float>::epsilon()) ? Eigen::Quaternionf::Identity()
+                                                              : q.normalized();
+  });
 
   // Rotation matrix (3x3)
   Eigen::Matrix3f R = q.toRotationMatrix();

@@ -106,10 +106,8 @@ TEST_F(PreprocessingUtilsTest, HandlesZeroStdDev)
   normalization_map["f"] = {{5.0f, 5.0f}, {0.0f, 0.0f}};
 
   // Should not throw, but result should be inf or nan depending on implementation
-  preprocess::normalize_input_data(input_data_map, normalization_map);
-
-  EXPECT_TRUE(std::isfinite(input_data_map["f"][0]) || std::isnan(input_data_map["f"][0]));
-  EXPECT_TRUE(std::isfinite(input_data_map["f"][1]) || std::isnan(input_data_map["f"][1]));
+  EXPECT_THROW(
+    preprocess::normalize_input_data(input_data_map, normalization_map), std::runtime_error);
 }
 
 TEST_F(PreprocessingUtilsTest, HandlesSingleMeanStdForAllCols)

@@ -47,10 +47,9 @@ void normalize_input_data(InputDataMap & input_data_map, const NormalizationMap 
         float s = (std_dev.size() == 1) ? std_dev[0] : std_dev[col];
         // Prevent division by zero
         if (std::abs(s) < std::numeric_limits<float>::epsilon()) {
-          data[offset + col] = 0.0f;  // or keep unchanged
-        } else {
-          data[offset + col] = (data[offset + col] - m) / s;
+          throw std::runtime_error("Standard deviation is zero, cannot normalize data");
         }
+        data[offset + col] = (data[offset + col] - m) / s;
       }
     }
   };
