@@ -22,9 +22,9 @@
 #include <rclcpp/duration.hpp>
 #include <rclcpp/time.hpp>
 
-#include <autoware_new_planning_msgs/msg/detail/trajectory__builder.hpp>
-#include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
-#include <autoware_new_planning_msgs/msg/trajectory_generator_info.hpp>
+#include <autoware_internal_planning_msgs/msg/detail/candidate_trajectory__builder.hpp>
+#include <autoware_internal_planning_msgs/msg/detail/candidate_trajectory__struct.hpp>
+#include <autoware_internal_planning_msgs/msg/generator_info.hpp>
 #include <autoware_perception_msgs/msg/detail/predicted_objects__struct.hpp>
 
 #include <Eigen/src/Core/Matrix.h>
@@ -37,7 +37,6 @@ namespace autoware::diffusion_planner::postprocess
 {
 using autoware_perception_msgs::msg::PredictedObject;
 using autoware_planning_msgs::msg::TrajectoryPoint;
-using NewTrajectoryMsg = autoware_new_planning_msgs::msg::Trajectory;
 
 void transform_output_matrix(
   const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
@@ -257,28 +256,27 @@ std::vector<Trajectory> create_multiple_trajectories(
   return agent_trajectories;
 }
 
-Trajectories to_trajectories_msg(
+CandidateTrajectories to_candidate_trajectories_msg(
   const Trajectory & trajectory, const UUID & generator_uuid, const std::string & generator_name)
 {
-  const auto new_trajectory =
-    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
-      .header(trajectory.header)
-      .generator_id(generator_uuid)
-      .points(trajectory.points)
-      .score(1.0);
+  const auto candidate_trajectory = autoware_internal_planning_msgs::build<
+                                      autoware_internal_planning_msgs::msg::CandidateTrajectory>()
+                                      .header(trajectory.header)
+                                      .generator_id(generator_uuid)
+                                      .points(trajectory.points);
 
   std_msgs::msg::String generator_name_msg;
   generator_name_msg.data = generator_name;
 
   const auto generator_info =
-    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo>()
+    autoware_internal_planning_msgs::build<autoware_internal_planning_msgs::msg::GeneratorInfo>()
       .generator_id(generator_uuid)
       .generator_name(generator_name_msg);
 
-  const auto output =
-    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectories>()
-      .trajectories({new_trajectory})
-      .generator_info({generator_info});
+  const auto output = autoware_internal_planning_msgs::build<
+                        autoware_internal_planning_msgs::msg::CandidateTrajectories>()
+                        .candidate_trajectories({candidate_trajectory})
+                        .generator_info({generator_info});
   return output;
 }
 

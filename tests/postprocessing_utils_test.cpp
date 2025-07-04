@@ -154,7 +154,7 @@ TEST(PostprocessingUtilsTest, CreateTrajectoryAndMultipleTrajectories)
   ASSERT_EQ(trajs.size(), expected_trajs);
 }
 
-TEST(PostprocessingUtilsTest, ToTrajectoriesMsgPopulatesFields)
+TEST(PostprocessingUtilsTest, ToCandidateTrajectoriesMsgPopulatesFields)
 {
   using UUID = unique_identifier_msgs::msg::UUID;
   Trajectory traj;
@@ -163,10 +163,10 @@ TEST(PostprocessingUtilsTest, ToTrajectoriesMsgPopulatesFields)
   UUID uuid;
   std::fill(uuid.uuid.begin(), uuid.uuid.end(), 42);
 
-  auto msg = postprocess::to_trajectories_msg(traj, uuid, "test_generator");
-  ASSERT_EQ(msg.trajectories.size(), 1);
+  auto msg = postprocess::to_candidate_trajectories_msg(traj, uuid, "test_generator");
+  ASSERT_EQ(msg.candidate_trajectories.size(), 1);
   ASSERT_EQ(msg.generator_info.size(), 1);
-  EXPECT_EQ(msg.trajectories[0].header.frame_id, "map");
+  EXPECT_EQ(msg.candidate_trajectories[0].header.frame_id, "map");
   EXPECT_EQ(msg.generator_info[0].generator_name.data, "test_generator");
 }
 
