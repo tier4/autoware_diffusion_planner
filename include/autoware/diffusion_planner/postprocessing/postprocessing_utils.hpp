@@ -20,7 +20,7 @@
 #include <Eigen/Dense>
 #include <rclcpp/rclcpp.hpp>
 
-#include <autoware_new_planning_msgs/msg/trajectories.hpp>
+#include <autoware_internal_planning_msgs/msg/candidate_trajectories.hpp>
 #include <autoware_perception_msgs/msg/detail/object_classification__struct.hpp>
 #include <autoware_perception_msgs/msg/detail/predicted_object__struct.hpp>
 #include <autoware_perception_msgs/msg/predicted_object.hpp>
@@ -34,7 +34,7 @@
 
 namespace autoware::diffusion_planner::postprocess
 {
-using autoware_new_planning_msgs::msg::Trajectories;
+using autoware_internal_planning_msgs::msg::CandidateTrajectories;
 using autoware_perception_msgs::msg::ObjectClassification;
 using autoware_perception_msgs::msg::PredictedObjects;
 using autoware_perception_msgs::msg::PredictedPath;
@@ -130,14 +130,14 @@ std::vector<Trajectory> create_multiple_trajectories(
   const Eigen::Matrix4f & transform_ego_to_map, long start_batch, long start_agent);
 
 /**
- * @brief Converts a Trajectory message to a Trajectories message with generator info.
+ * @brief Converts a Trajectory message to a CandidateTrajectories message with generator info.
  *
  * @param trajectory The Trajectory message to convert.
  * @param generator_uuid The UUID of the trajectory generator.
  * @param generator_name The name of the trajectory generator.
- * @return A Trajectories message containing the input trajectory and generator info.
+ * @return A CandidateTrajectories message containing the input trajectory and generator info.
  */
-Trajectories to_trajectories_msg(
+CandidateTrajectories to_candidate_trajectories_msg(
   const Trajectory & trajectory, const UUID & generator_uuid, const std::string & generator_name);
 
 }  // namespace autoware::diffusion_planner::postprocess

@@ -54,7 +54,7 @@ DiffusionPlanner::DiffusionPlanner(const rclcpp::NodeOptions & options)
 {
   // Initialize the node
   pub_trajectory_ = this->create_publisher<Trajectory>("~/output/trajectory", 1);
-  pub_trajectories_ = this->create_publisher<Trajectories>("~/output/trajectories", 1);
+  pub_trajectories_ = this->create_publisher<CandidateTrajectories>("~/output/trajectories", 1);
   pub_objects_ =
     this->create_publisher<PredictedObjects>("~/output/predicted_objects", rclcpp::QoS(1));
   pub_route_marker_ = this->create_publisher<MarkerArray>("~/debug/route_marker", 10);
@@ -414,9 +414,9 @@ void DiffusionPlanner::publish_predictions(const std::vector<float> & prediction
     predictions, this->now(), transforms_.first, batch_idx, ego_agent_idx);
   pub_trajectory_->publish(output_trajectory);
 
-  auto ego_trajectory_as_new_msg =
-    postprocess::to_trajectories_msg(output_trajectory, generator_uuid_, "DiffusionPlanner");
-  pub_trajectories_->publish(ego_trajectory_as_new_msg);
+  auto ego_trajectory_as_candidate_msg =
+    postprocess::to_candidate_trajectories_msg(output_trajectory, generator_uuid_, "DiffusionPlanner");
+  pub_trajectories_->publish(ego_trajectory_as_candidate_msg);
 
   // Other agents prediction
   if (params_.predict_neighbor_trajectory && agent_data_.has_value()) {

@@ -22,9 +22,9 @@
 #include <rclcpp/duration.hpp>
 #include <rclcpp/time.hpp>
 
-#include <autoware_new_planning_msgs/msg/detail/trajectory__builder.hpp>
-#include <autoware_new_planning_msgs/msg/detail/trajectory__struct.hpp>
-#include <autoware_new_planning_msgs/msg/trajectory_generator_info.hpp>
+#include <autoware_internal_planning_msgs/msg/detail/candidate_trajectory__builder.hpp>
+#include <autoware_internal_planning_msgs/msg/detail/candidate_trajectory__struct.hpp>
+#include <autoware_internal_planning_msgs/msg/generator_info.hpp>
 #include <autoware_perception_msgs/msg/detail/predicted_objects__struct.hpp>
 
 #include <Eigen/src/Core/Matrix.h>
@@ -37,7 +37,6 @@ namespace autoware::diffusion_planner::postprocess
 {
 using autoware_perception_msgs::msg::PredictedObject;
 using autoware_planning_msgs::msg::TrajectoryPoint;
-using NewTrajectoryMsg = autoware_new_planning_msgs::msg::Trajectory;
 
 void transform_output_matrix(
   const Eigen::Matrix4f & transform_matrix, Eigen::MatrixXf & output_matrix, long column_idx,
@@ -133,14 +132,15 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data(
     batch_size * agent_size * rows, cols);
   tensor_data.setZero();
-  
+
   // Ensure prediction has enough data
   const size_t required_size = tensor_data.size();
   if (prediction.size() < required_size) {
-    throw std::runtime_error("Prediction vector size (" + std::to_string(prediction.size()) + 
-                           ") is smaller than required (" + std::to_string(required_size) + ")");
+    throw std::runtime_error(
+      "Prediction vector size (" + std::to_string(prediction.size()) +
+      ") is smaller than required (" + std::to_string(required_size) + ")");
   }
-  
+
   std::memcpy(tensor_data.data(), prediction.data(), required_size * sizeof(float));
   return tensor_data;
 }
@@ -162,14 +162,13 @@ Eigen::MatrixXf get_prediction_matrix(
   // Validate indices before accessing block
   const long start_row = batch * agent_size * rows + agent * rows;
   if (start_row < 0 || start_row + rows > tensor_data.rows()) {
-    throw std::out_of_range("Invalid block access: start_row=" + std::to_string(start_row) + 
-                          ", rows=" + std::to_string(rows) + 
-                          ", tensor_rows=" + std::to_string(tensor_data.rows()));
+    throw std::out_of_range(
+      "Invalid block access: start_row=" + std::to_string(start_row) +
+      ", rows=" + std::to_string(rows) + ", tensor_rows=" + std::to_string(tensor_data.rows()));
   }
-  
+
   // Extract and copy the block to ensure we have a proper matrix, not just a view
-  Eigen::MatrixXf prediction_matrix = 
-    tensor_data.block(start_row, 0, rows, cols).eval();
+  Eigen::MatrixXf prediction_matrix = tensor_data.block(start_row, 0, rows, cols).eval();
 
   // Copy only the relevant part
   prediction_matrix.transposeInPlace();
@@ -252,28 +251,27 @@ std::vector<Trajectory> create_multiple_trajectories(
   return agent_trajectories;
 }
 
-Trajectories to_trajectories_msg(
+CandidateTrajectories to_candidate_trajectories_msg(
   const Trajectory & trajectory, const UUID & generator_uuid, const std::string & generator_name)
 {
-  const auto new_trajectory =
-    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectory>()
-      .header(trajectory.header)
-      .generator_id(generator_uuid)
-      .points(trajectory.points)
-      .score(1.0);
+  const auto candidate_trajectory = autoware_internal_planning_msgs::build<
+                                      autoware_internal_planning_msgs::msg::CandidateTrajectory>()
+                                      .header(trajectory.header)
+                                      .generator_id(generator_uuid)
+                                      .points(trajectory.points);
 
   std_msgs::msg::String generator_name_msg;
   generator_name_msg.data = generator_name;
 
   const auto generator_info =
-    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::TrajectoryGeneratorInfo>()
+    autoware_internal_planning_msgs::build<autoware_internal_planning_msgs::msg::GeneratorInfo>()
       .generator_id(generator_uuid)
       .generator_name(generator_name_msg);
 
-  const auto output =
-    autoware_new_planning_msgs::build<autoware_new_planning_msgs::msg::Trajectories>()
-      .trajectories({new_trajectory})
-      .generator_info({generator_info});
+  const auto output = autoware_internal_planning_msgs::build<
+                        autoware_internal_planning_msgs::msg::CandidateTrajectories>()
+                        .candidate_trajectories({candidate_trajectory})
+                        .generator_info({generator_info});
   return output;
 }
 
