@@ -58,11 +58,13 @@ PredictedObjects create_predicted_objects(
   const std::vector<float> & prediction, const AgentData & ego_centric_agent_data,
   const rclcpp::Time & stamp, const Eigen::Matrix4f & transform_ego_to_map)
 {
-  auto trajectory_path_to_pose_path =
-    [&](const Trajectory & trajectory) -> std::vector<geometry_msgs::msg::Pose> {
+  auto trajectory_path_to_pose_path = [&](const Trajectory & trajectory, const double object_z)
+    -> std::vector<geometry_msgs::msg::Pose> {
     std::vector<geometry_msgs::msg::Pose> pose_path;
     std::for_each(trajectory.points.begin(), trajectory.points.end(), [&](const auto & p) {
-      pose_path.push_back(p.pose);
+      auto object_pose = p.pose;
+      object_pose.position.z = object_z;  // Set the z coordinate to the object's z
+      pose_path.push_back(object_pose);
     });
 
     return pose_path;
@@ -96,7 +98,10 @@ PredictedObjects create_predicted_objects(
     {  // Extract path from prediction
       const auto & trajectory_points_in_map_reference = agent_trajectories.at(agent - 1);
       PredictedPath predicted_path;
-      predicted_path.path = trajectory_path_to_pose_path(trajectory_points_in_map_reference);
+      const auto object_pose_z = object_info.kinematics.pose_with_covariance.pose.position.z;
+
+      predicted_path.path =
+        trajectory_path_to_pose_path(trajectory_points_in_map_reference, object_pose_z);
       predicted_path.time_step = rclcpp::Duration::from_seconds(time_step);
       predicted_path.confidence = 1.0;
       object.kinematics.predicted_paths.push_back(predicted_path);
@@ -133,14 +138,15 @@ Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> get_tensor
   Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> tensor_data(
     batch_size * agent_size * rows, cols);
   tensor_data.setZero();
-  
+
   // Ensure prediction has enough data
   const size_t required_size = tensor_data.size();
   if (prediction.size() < required_size) {
-    throw std::runtime_error("Prediction vector size (" + std::to_string(prediction.size()) + 
-                           ") is smaller than required (" + std::to_string(required_size) + ")");
+    throw std::runtime_error(
+      "Prediction vector size (" + std::to_string(prediction.size()) +
+      ") is smaller than required (" + std::to_string(required_size) + ")");
   }
-  
+
   std::memcpy(tensor_data.data(), prediction.data(), required_size * sizeof(float));
   return tensor_data;
 }
@@ -162,14 +168,13 @@ Eigen::MatrixXf get_prediction_matrix(
   // Validate indices before accessing block
   const long start_row = batch * agent_size * rows + agent * rows;
   if (start_row < 0 || start_row + rows > tensor_data.rows()) {
-    throw std::out_of_range("Invalid block access: start_row=" + std::to_string(start_row) + 
-                          ", rows=" + std::to_string(rows) + 
-                          ", tensor_rows=" + std::to_string(tensor_data.rows()));
+    throw std::out_of_range(
+      "Invalid block access: start_row=" + std::to_string(start_row) +
+      ", rows=" + std::to_string(rows) + ", tensor_rows=" + std::to_string(tensor_data.rows()));
   }
-  
+
   // Extract and copy the block to ensure we have a proper matrix, not just a view
-  Eigen::MatrixXf prediction_matrix = 
-    tensor_data.block(start_row, 0, rows, cols).eval();
+  Eigen::MatrixXf prediction_matrix = tensor_data.block(start_row, 0, rows, cols).eval();
 
   // Copy only the relevant part
   prediction_matrix.transposeInPlace();
