@@ -39,8 +39,8 @@
 #include <rclcpp/subscription.hpp>
 #include <rclcpp/timer.hpp>
 
-#include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
 #include <autoware_internal_planning_msgs/msg/candidate_trajectories.hpp>
+#include <autoware_map_msgs/msg/lanelet_map_bin.hpp>
 #include <autoware_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_perception_msgs/msg/tracked_objects.hpp>
 #include <autoware_perception_msgs/msg/traffic_signal.hpp>
@@ -241,14 +241,20 @@ public:
   std::unique_ptr<TrtConvCalib> trt_common_;
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> network_trt_ptr_{nullptr};
   // For float inputs and output
+  CudaUniquePtr<float[]> ego_history_d_;
   CudaUniquePtr<float[]> ego_current_state_d_;
   CudaUniquePtr<float[]> neighbor_agents_past_d_;
   CudaUniquePtr<float[]> static_objects_d_;
   CudaUniquePtr<float[]> lanes_d_;
+  CudaUniquePtr<bool[]> lanes_has_speed_limit_d_;
   CudaUniquePtr<float[]> lanes_speed_limit_d_;
   CudaUniquePtr<float[]> route_lanes_d_;
-  CudaUniquePtr<float[]> output_d_;  // shape: [1, 11, 80, 4]
-  CudaUniquePtr<bool[]> lanes_has_speed_limit_d_;
+  CudaUniquePtr<bool[]> route_lanes_has_speed_limit_d_;
+  CudaUniquePtr<float[]> route_lanes_speed_limit_d_;
+  CudaUniquePtr<float[]> goal_pose_d_;
+  CudaUniquePtr<float[]> ego_shape_d_;
+  CudaUniquePtr<float[]> output_d_;                // shape: [1, 11, 80, 4]
+  CudaUniquePtr<float[]> turn_indicator_logit_d_;  // shape: [1, 4]
   cudaStream_t stream_{nullptr};
 
   // Model input data

@@ -46,13 +46,19 @@ inline constexpr long LANE_ID = 13;
 
 inline constexpr long OUTPUT_T = 80;  // Output timestamp number
 inline constexpr std::array<long, 4> OUTPUT_SHAPE = {1, 33, 80, 4};
+inline constexpr std::array<long, 2> TURN_INDICATOR_LOGIT_SHAPE = {1, 4};
 
+inline constexpr std::array<long, 3> EGO_HISTORY_SHAPE = {1, 21, 4};
 inline constexpr std::array<long, 2> EGO_CURRENT_STATE_SHAPE = {1, 10};
 inline constexpr std::array<long, 4> NEIGHBOR_SHAPE = {1, 32, 21, 11};
-inline constexpr std::array<long, 3> LANE_HAS_SPEED_LIMIT_SHAPE = {1, 70, 1};
 inline constexpr std::array<long, 3> STATIC_OBJECTS_SHAPE = {1, 5, 10};
 inline constexpr std::array<long, 4> LANES_SHAPE = {1, 70, 20, 12};
+inline constexpr std::array<long, 3> LANES_HAS_SPEED_LIMIT_SHAPE = {1, 70, 1};
 inline constexpr std::array<long, 3> LANES_SPEED_LIMIT_SHAPE = {1, 70, 1};
 inline constexpr std::array<long, 4> ROUTE_LANES_SHAPE = {1, 25, 20, 12};
+inline constexpr std::array<long, 3> ROUTE_LANES_HAS_SPEED_LIMIT_SHAPE = {1, 25, 1};
+inline constexpr std::array<long, 3> ROUTE_LANES_SPEED_LIMIT_SHAPE = {1, 25, 1};
+inline constexpr std::array<long, 2> GOAL_POSE_SHAPE = {1, 4};
+inline constexpr std::array<long, 2> EGO_SHAPE_SHAPE = {1, 3};
 }  // namespace autoware::diffusion_planner
 #endif  // AUTOWARE__DIFFUSION_PLANNER__DIMENSIONS_HPP_
