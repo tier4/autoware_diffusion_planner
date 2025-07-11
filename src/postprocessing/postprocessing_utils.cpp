@@ -200,10 +200,10 @@ Trajectory get_trajectory_from_prediction_matrix(
     p.time_from_start.sec = static_cast<int>(dt * static_cast<double>(row));
     p.time_from_start.nanosec =
       static_cast<int>((dt * static_cast<double>(row) - p.time_from_start.sec) * 1e9);
-    p.pose.position.x = prediction_matrix(row, 0);
-    p.pose.position.y = prediction_matrix(row, 1);
+    p.pose.position.x = prediction_matrix(row, OUTPUT_X);
+    p.pose.position.y = prediction_matrix(row, OUTPUT_Y);
     p.pose.position.z = ego_position.z();
-    auto yaw = std::atan2(prediction_matrix(row, 3), prediction_matrix(row, 2));
+    auto yaw = std::atan2(prediction_matrix(row, OUTPUT_SIN), prediction_matrix(row, OUTPUT_COS));
     yaw = static_cast<float>(autoware_utils::normalize_radian(yaw));
     p.pose.orientation = autoware_utils::create_quaternion_from_yaw(yaw);
     auto distance = std::hypot(p.pose.position.x - prev_x, p.pose.position.y - prev_y);
@@ -247,8 +247,9 @@ std::vector<Trajectory> create_multiple_trajectories(
         tensor_data.block(batch * agent_size * rows + agent * rows, 0, rows, cols);
 
       prediction_matrix.transposeInPlace();
-      postprocess::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 0, true);
-      postprocess::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, 2, false);
+      postprocess::transform_output_matrix(transform_ego_to_map, prediction_matrix, 0, OUTPUT_X, true);
+      postprocess::transform_output_matrix(
+        transform_ego_to_map, prediction_matrix, 0, OUTPUT_COS, false);
       prediction_matrix.transposeInPlace();
       agent_trajectories.push_back(
         get_trajectory_from_prediction_matrix(prediction_matrix, transform_ego_to_map, stamp));
