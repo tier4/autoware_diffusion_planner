@@ -434,7 +434,23 @@ InputDataMap DiffusionPlanner::create_input_data()
 
   // goal pose
   {
-    input_data_map["goal_pose"] = std::vector<float>{0.0f, 0.0f, 0.0f, 0.0f};
+    const auto & goal_pose = route_handler_->getGoalPose();
+
+    // Convert goal pose to 4x4 transformation matrix
+    const Eigen::Matrix4f goal_pose_map_4x4 = utils::pose_to_matrix4f(goal_pose);
+
+    // Transform to ego frame
+    const Eigen::Matrix4f goal_pose_ego_4x4 = map_to_ego_transform * goal_pose_map_4x4;
+
+    // Extract relative position
+    const float x = goal_pose_ego_4x4(0, 3);
+    const float y = goal_pose_ego_4x4(1, 3);
+
+    // Extract heading as cos/sin from rotation matrix
+    const float cos_yaw = goal_pose_ego_4x4(0, 0);
+    const float sin_yaw = goal_pose_ego_4x4(1, 0);
+
+    input_data_map["goal_pose"] = std::vector<float>{x, y, cos_yaw, sin_yaw};
   }
 
   // ego shape
