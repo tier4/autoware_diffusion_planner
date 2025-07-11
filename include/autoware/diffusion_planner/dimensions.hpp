@@ -45,10 +45,10 @@ inline constexpr long SPEED_LIMIT = 12;
 inline constexpr long LANE_ID = 13;
 
 inline constexpr long OUTPUT_T = 80;  // Output timestamp number
-inline constexpr long OUT_X = 0;      // Output timestamp number
-inline constexpr long OUT_Y = 1;      // Output timestamp number
-inline constexpr long OUT_COS = 2;    // Output timestamp number
-inline constexpr long OUT_SIN = 3;    // Output timestamp number
+inline constexpr long OUTPUT_X = 0;    // Output tensor X-coordinate index
+inline constexpr long OUTPUT_Y = 1;    // Output tensor Y-coordinate index
+inline constexpr long OUTPUT_COS = 2;  // Output tensor cosine (orientation) index
+inline constexpr long OUTPUT_SIN = 3;  // Output tensor sine (orientation) index
 
 inline constexpr std::array<long, 4> OUTPUT_SHAPE = {1, 33, 80, 4};
 
