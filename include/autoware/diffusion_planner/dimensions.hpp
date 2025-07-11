@@ -45,6 +45,11 @@ inline constexpr long SPEED_LIMIT = 12;
 inline constexpr long LANE_ID = 13;
 
 inline constexpr long OUTPUT_T = 80;  // Output timestamp number
+inline constexpr long OUT_X = 0;      // Output timestamp number
+inline constexpr long OUT_Y = 1;      // Output timestamp number
+inline constexpr long OUT_COS = 2;    // Output timestamp number
+inline constexpr long OUT_SIN = 3;    // Output timestamp number
+
 inline constexpr std::array<long, 4> OUTPUT_SHAPE = {1, 33, 80, 4};
 
 inline constexpr std::array<long, 2> EGO_CURRENT_STATE_SHAPE = {1, 10};
