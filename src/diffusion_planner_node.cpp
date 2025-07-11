@@ -455,7 +455,13 @@ InputDataMap DiffusionPlanner::create_input_data()
 
   // ego shape
   {
-    input_data_map["ego_shape"] = std::vector<float>{0.0f, 0.0f, 0.0f};
+    const float wheel_base = static_cast<float>(vehicle_info_.wheel_base_m);
+    const float vehicle_length = static_cast<float>(
+      vehicle_info_.front_overhang_m + vehicle_info_.wheel_base_m + vehicle_info_.rear_overhang_m);
+    const float vehicle_width = static_cast<float>(
+      vehicle_info_.left_overhang_m + vehicle_info_.wheel_tread_m + vehicle_info_.right_overhang_m);
+
+    input_data_map["ego_shape"] = std::vector<float>{wheel_base, vehicle_length, vehicle_width};
   }
 
   // route_lanes_speed_limit
