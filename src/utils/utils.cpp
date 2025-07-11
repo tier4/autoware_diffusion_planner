@@ -121,4 +121,12 @@ Eigen::Matrix4f pose_to_matrix4f(const geometry_msgs::msg::Pose & pose)
   return pose_matrix;
 }
 
+std::pair<float, float> rotation_matrix_to_cos_sin(const Eigen::Matrix3f & rotation_matrix)
+{
+  // Extract yaw angle from rotation matrix and convert to cos/sin
+  // Using atan2 to get the yaw angle from the rotation matrix
+  const float yaw = std::atan2(rotation_matrix(1, 0), rotation_matrix(0, 0));
+  return {std::cos(yaw), std::sin(yaw)};
+}
+
 }  // namespace autoware::diffusion_planner::utils

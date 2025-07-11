@@ -59,6 +59,7 @@
 #include <lanelet2_routing/RoutingGraph.h>
 #include <lanelet2_traffic_rules/TrafficRules.h>
 
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -234,8 +235,18 @@ public:
   AgentData get_ego_centric_agent_data(
     const TrackedObjects & objects, const Eigen::Matrix4f & map_to_ego_transform);
 
+  /**
+   * @brief Create ego agent past tensor from ego history.
+   * @param map_to_ego_transform Transformation matrix from map to ego frame.
+   * @return Vector of float values representing ego agent past.
+   */
+  std::vector<float> create_ego_agent_past(const Eigen::Matrix4f & map_to_ego_transform);
+
   // current state
   Odometry ego_kinematic_state_;
+
+  // ego history for ego_agent_past
+  std::deque<Odometry> ego_history_;
 
   // TensorRT
   std::unique_ptr<TrtConvCalib> trt_common_;
