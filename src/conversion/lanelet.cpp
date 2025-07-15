@@ -104,6 +104,35 @@ std::vector<LanePoint> interpolate_points(const std::vector<LanePoint> & input, 
   // Always include the last point
   result.push_back(input.back());
 
+  // Recalculate direction vectors based on actual interpolated positions
+  // Helper lambda to update a point's direction vector
+  auto update_point_direction = [](std::vector<LanePoint> & points, size_t point_idx,
+                                   size_t from_idx, size_t to_idx) {
+    float dx = points[to_idx].x() - points[from_idx].x();
+    float dy = points[to_idx].y() - points[from_idx].y();
+    float dz = points[to_idx].z() - points[from_idx].z();
+
+    normalize_direction(dx, dy, dz);
+
+    points[point_idx] = LanePoint(
+      points[point_idx].x(), points[point_idx].y(), points[point_idx].z(),
+      dx, dy, dz, points[point_idx].label());
+  };
+
+  if (result.size() > 1) {
+    // Handle first point direction (points to next)
+    update_point_direction(result, 0, 0, 1);
+
+    // Handle middle points (point to next)
+    for (size_t i = 1; i < result.size() - 1; ++i) {
+      update_point_direction(result, i, i, i + 1);
+    }
+
+    // Handle last point direction (from previous)
+    size_t last_idx = result.size() - 1;
+    update_point_direction(result, last_idx, last_idx - 1, last_idx);
+  }
+
   return result;
 }
 
@@ -221,23 +250,18 @@ std::vector<LanePoint> LaneletConverter::from_linestring(
         distance > distance_threshold) {
       continue;
     }
-    double dx{0.0};
-    double dy{0.0};
-    double dz{0.0};
-    constexpr double epsilon = 1e-6;
+    float dx{0.0f};
+    float dy{0.0f};
+    float dz{0.0f};
     if (itr == linestring.begin()) {
-      dx = 0.0;
-      dy = 0.0;
-      dz = 0.0;
+      dx = 0.0f;
+      dy = 0.0f;
+      dz = 0.0f;
     } else {
-      dx = itr->x() - (itr - 1)->x();
-      dy = itr->y() - (itr - 1)->y();
-      dz = itr->z() - (itr - 1)->z();
-      auto norm = std::hypot(dx, dy, dz);
-      norm = (norm > epsilon) ? norm : 1.0;
-      dx /= (norm);
-      dy /= (norm);
-      dz /= (norm);
+      dx = static_cast<float>(itr->x() - (itr - 1)->x());
+      dy = static_cast<float>(itr->y() - (itr - 1)->y());
+      dz = static_cast<float>(itr->z() - (itr - 1)->z());
+      normalize_direction(dx, dy, dz);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID
@@ -270,23 +294,18 @@ std::vector<LanePoint> LaneletConverter::from_polygon(
         distance > distance_threshold) {
       continue;
     }
-    double dx{0.0};
-    double dy{0.0};
-    double dz{0.0};
-    constexpr double epsilon = 1e-6;
+    float dx{0.0f};
+    float dy{0.0f};
+    float dz{0.0f};
     if (itr == polygon.begin()) {
-      dx = 0.0;
-      dy = 0.0;
-      dz = 0.0;
+      dx = 0.0f;
+      dy = 0.0f;
+      dz = 0.0f;
     } else {
-      dx = itr->x() - (itr - 1)->x();
-      dy = itr->y() - (itr - 1)->y();
-      dz = itr->z() - (itr - 1)->z();
-      auto norm = std::hypot(dx, dy, dz);
-      norm = (norm > epsilon) ? norm : 1.0;
-      dx /= (norm);
-      dy /= (norm);
-      dz /= (norm);
+      dx = static_cast<float>(itr->x() - (itr - 1)->x());
+      dy = static_cast<float>(itr->y() - (itr - 1)->y());
+      dz = static_cast<float>(itr->z() - (itr - 1)->z());
+      normalize_direction(dx, dy, dz);
     }
     output.emplace_back(
       itr->x(), itr->y(), itr->z(), dx, dy, dz, 0.0);  // TODO(danielsanchezaran): Label ID

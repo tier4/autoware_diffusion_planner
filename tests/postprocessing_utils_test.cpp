@@ -62,15 +62,23 @@ TEST(PostprocessingUtilsTest, TransformOutputMatrixNoTranslation)
 
 TEST(PostprocessingUtilsTest, GetTensorDataCopiesData)
 {
-  std::vector<float> data{1, 2, 3, 4, 5, 6};
   std::vector<int64_t> shape{1, 1, 2, 3};
 
-  auto mat = postprocess::get_tensor_data(data);
   constexpr auto prediction_shape = OUTPUT_SHAPE;
   auto batch_size = prediction_shape[0];
   auto agent_size = prediction_shape[1];
   auto rows = prediction_shape[2];
   auto cols = prediction_shape[3];
+
+  std::vector<float> data(batch_size * agent_size * rows * cols, 0.0f);
+  data[0] = 1.0f;
+  data[1] = 2.0f;
+  data[2] = 3.0f;
+  data[3] = 4.0f;
+  data[4] = 5.0f;
+  data[5] = 6.0f;
+  data[6] = 7.0f;
+  auto mat = postprocess::get_tensor_data(data);
 
   ASSERT_EQ(mat.rows(), batch_size * agent_size * rows);
   ASSERT_EQ(mat.cols(), cols);
@@ -81,9 +89,13 @@ TEST(PostprocessingUtilsTest, GetTensorDataCopiesData)
 
 TEST(PostprocessingUtilsTest, GetPredictionMatrixTransformsCorrectly)
 {
-  constexpr int rows = 3;
-  constexpr int cols = OUTPUT_T;  // Use the actual OUTPUT_T value
-  std::vector<float> data(rows * cols, 0.0f);
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+  auto batch_size = prediction_shape[0];
+  auto agent_size = prediction_shape[1];
+  auto rows = prediction_shape[2];
+  auto cols = prediction_shape[3];
+
+  std::vector<float> data(batch_size * agent_size * rows * cols, 0.0f);
   // Fill with some values for checking
   for (int i = 0; i < rows * cols; ++i) data[i] = static_cast<float>(i);
 
@@ -94,14 +106,12 @@ TEST(PostprocessingUtilsTest, GetPredictionMatrixTransformsCorrectly)
   transform(1, 3) = 2.0f;
 
   auto mat = postprocess::get_prediction_matrix(data, transform, 0, 0);
-  constexpr auto prediction_shape = OUTPUT_SHAPE;
 
   auto expected_rows = prediction_shape[2];
   auto expected_cols = prediction_shape[3];
 
   ASSERT_EQ(mat.rows(), expected_rows);
   ASSERT_EQ(mat.cols(), expected_cols);
-  // Optionally, check a few values to ensure transformation occurred
 }
 
 TEST(PostprocessingUtilsTest, GetTrajectoryFromPredictionMatrixWorks)
@@ -121,19 +131,18 @@ TEST(PostprocessingUtilsTest, GetTrajectoryFromPredictionMatrixWorks)
 
 TEST(PostprocessingUtilsTest, CreateTrajectoryAndMultipleTrajectories)
 {
-  constexpr int batch = 1;
-  constexpr int agent = 2;
-  constexpr int rows = 2;
-  constexpr int cols = OUTPUT_T;
-  std::vector<float> data(batch * agent * rows * cols, 0.0f);
+  constexpr auto prediction_shape = OUTPUT_SHAPE;
+  auto batch_size = prediction_shape[0];
+  auto agent_size = prediction_shape[1];
+  auto rows = prediction_shape[2];
+  auto cols = prediction_shape[3];
+  std::vector<float> data(batch_size * agent_size * rows * cols, 0.0f);
   // Fill with some values for checking
   for (size_t i = 0; i < data.size(); ++i) data[i] = static_cast<float>(i);
 
-  std::vector<int64_t> shape{batch, agent, rows, cols};
+  std::vector<int64_t> shape{batch_size, agent_size, rows, cols};
   Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
   rclcpp::Time stamp(123, 0);
-
-  constexpr auto prediction_shape = OUTPUT_SHAPE;
 
   auto expected_trajs = prediction_shape[1];
   auto expected_points = prediction_shape[2];
@@ -145,7 +154,7 @@ TEST(PostprocessingUtilsTest, CreateTrajectoryAndMultipleTrajectories)
   ASSERT_EQ(trajs.size(), expected_trajs);
 }
 
-TEST(PostprocessingUtilsTest, ToTrajectoriesMsgPopulatesFields)
+TEST(PostprocessingUtilsTest, ToCandidateTrajectoriesMsgPopulatesFields)
 {
   using UUID = unique_identifier_msgs::msg::UUID;
   Trajectory traj;
@@ -154,10 +163,10 @@ TEST(PostprocessingUtilsTest, ToTrajectoriesMsgPopulatesFields)
   UUID uuid;
   std::fill(uuid.uuid.begin(), uuid.uuid.end(), 42);
 
-  auto msg = postprocess::to_trajectories_msg(traj, uuid, "test_generator");
-  ASSERT_EQ(msg.trajectories.size(), 1);
+  auto msg = postprocess::to_candidate_trajectories_msg(traj, uuid, "test_generator");
+  ASSERT_EQ(msg.candidate_trajectories.size(), 1);
   ASSERT_EQ(msg.generator_info.size(), 1);
-  EXPECT_EQ(msg.trajectories[0].header.frame_id, "map");
+  EXPECT_EQ(msg.candidate_trajectories[0].header.frame_id, "map");
   EXPECT_EQ(msg.generator_info[0].generator_name.data, "test_generator");
 }
 
