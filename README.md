@@ -1,3 +1,5 @@
+# Since [it has been merged into Autoware](https://github.com/autowarefoundation/autoware_universe/pull/10957), this repository is scheduled to be archived. Please add new features to Autoware Universe.
+
 # Autoware Diffusion Planner
 
 ## Overview
