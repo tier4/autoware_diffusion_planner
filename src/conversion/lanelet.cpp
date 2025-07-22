@@ -34,6 +34,7 @@ enum LIGHT_SIGNAL_STATE {
   AMBER = 1,
   RED = 2,
   UNKNOWN = 3,
+  NO_TRAFFIC_LIGHT = 4,
 };
 
 // Compute Euclidean distance between two LanePoints

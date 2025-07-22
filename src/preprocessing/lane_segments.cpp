@@ -102,17 +102,19 @@ void add_traffic_light_one_hot_encoding_to_segment(
   const auto assigned_lanelet = lanelet_map_ptr->laneletLayer.get(lane_id_itr->second);
   auto tl_reg_elems = assigned_lanelet.regulatoryElementsAs<const lanelet::TrafficLight>();
 
+  Eigen::Matrix<float, TRAFFIC_LIGHT_ONE_HOT_DIM, 1> traffic_light_one_hot_encoding =
+    Eigen::Matrix<float, TRAFFIC_LIGHT_ONE_HOT_DIM, 1>::Zero();
   if (tl_reg_elems.empty()) {
-    return;
+    traffic_light_one_hot_encoding[TRAFFIC_LIGHT_NO_TRAFFIC_LIGHT - TRAFFIC_LIGHT] = 1.0f;
+  } else {
+    const auto & tl_reg_elem = tl_reg_elems.front();
+    const auto traffic_light_stamped_info_itr = traffic_light_id_map.find(tl_reg_elem->id());
+    if (traffic_light_stamped_info_itr == traffic_light_id_map.end()) {
+      return;
+    }
+    const auto & signal = traffic_light_stamped_info_itr->second.signal;
+    traffic_light_one_hot_encoding = get_traffic_signal_row_vector(signal);
   }
-  const auto & tl_reg_elem = tl_reg_elems.front();
-  const auto traffic_light_stamped_info_itr = traffic_light_id_map.find(tl_reg_elem->id());
-  if (traffic_light_stamped_info_itr == traffic_light_id_map.end()) {
-    return;
-  }
-  const auto & signal = traffic_light_stamped_info_itr->second.signal;
-
-  Eigen::Vector4f traffic_light_one_hot_encoding = get_traffic_signal_row_vector(signal);
   Eigen::MatrixXf one_hot_encoding_matrix =
     traffic_light_one_hot_encoding.replicate(1, POINTS_PER_SEGMENT);
   segment_matrix.block<TRAFFIC_LIGHT_ONE_HOT_DIM, POINTS_PER_SEGMENT>(
@@ -120,7 +122,7 @@ void add_traffic_light_one_hot_encoding_to_segment(
     one_hot_encoding_matrix.block<TRAFFIC_LIGHT_ONE_HOT_DIM, POINTS_PER_SEGMENT>(0, 0);
 }
 
-Eigen::RowVector4f get_traffic_signal_row_vector(
+Eigen::Matrix<float, 1, 5> get_traffic_signal_row_vector(
   const autoware_perception_msgs::msg::TrafficLightGroup & signal)
 {
   const auto is_green = autoware::traffic_light_utils::hasTrafficLightCircleColor(
@@ -136,11 +138,11 @@ Eigen::RowVector4f get_traffic_signal_row_vector(
     static_cast<float>(is_green) + static_cast<float>(is_amber) + static_cast<float>(is_red) >
     1.f) {
     throw std::invalid_argument("more than one traffic light");
-    return {0.f, 0.f, 0.f, 1.f};
+    return {0.f, 0.f, 0.f, 1.f, 0.f};
   }
   return {
     static_cast<float>(is_green), static_cast<float>(is_amber), static_cast<float>(is_red),
-    static_cast<float>(!has_color)};
+    static_cast<float>(!has_color), 0.f};
 }
 
 std::tuple<Eigen::MatrixXf, ColLaneIDMaps> transform_points_and_add_traffic_info(
@@ -286,19 +288,20 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
   Eigen::MatrixXf segment_data(POINTS_PER_SEGMENT, FULL_MATRIX_ROWS);
 
   // Encode traffic light as one-hot
-  Eigen::Vector4f traffic_light_vec = Eigen::Vector4f::Zero();
+  Eigen::Matrix<float, TRAFFIC_LIGHT_ONE_HOT_DIM, 1> traffic_light_vec =
+    Eigen::Matrix<float, TRAFFIC_LIGHT_ONE_HOT_DIM, 1>::Zero();
   switch (segment.traffic_light) {
     case 1:
-      traffic_light_vec[2] = 1.0f;
+      traffic_light_vec[TRAFFIC_LIGHT_RED - TRAFFIC_LIGHT] = 1.0f;
       break;  // RED
     case 2:
-      traffic_light_vec[1] = 1.0f;
+      traffic_light_vec[TRAFFIC_LIGHT_YELLOW - TRAFFIC_LIGHT] = 1.0f;
       break;  // AMBER
     case 3:
-      traffic_light_vec[0] = 1.0f;
+      traffic_light_vec[TRAFFIC_LIGHT_GREEN - TRAFFIC_LIGHT] = 1.0f;
       break;  // GREEN
     default:
-      traffic_light_vec[3] = 1.0f;
+      traffic_light_vec[TRAFFIC_LIGHT_WHITE - TRAFFIC_LIGHT] = 1.0f;
       break;  // WHITE/UNKNOWN
   }
 
@@ -314,7 +317,8 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
     segment_data(i, LB_Y) = left_boundaries[i].y();
     segment_data(i, RB_X) = right_boundaries[i].x();
     segment_data(i, RB_Y) = right_boundaries[i].y();
-    segment_data.block<1, 4>(i, TRAFFIC_LIGHT) = traffic_light_vec.transpose();
+    segment_data.block<1, TRAFFIC_LIGHT_ONE_HOT_DIM>(i, TRAFFIC_LIGHT) =
+      traffic_light_vec.transpose();
     segment_data(i, SPEED_LIMIT) = segment.speed_limit_mps.value_or(0.0f);
     segment_data(i, LANE_ID) = static_cast<float>(segment.id);
   }

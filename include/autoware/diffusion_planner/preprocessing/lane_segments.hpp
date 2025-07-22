@@ -169,7 +169,7 @@ void add_traffic_light_one_hot_encoding_to_segment(
  * @param signal The traffic light group message.
  * @return Row vector with one-hot encoding for [green, amber, red, unknown].
  */
-Eigen::RowVector4f get_traffic_signal_row_vector(
+Eigen::Matrix<float, 1, TRAFFIC_LIGHT_ONE_HOT_DIM> get_traffic_signal_row_vector(
   const autoware_perception_msgs::msg::TrafficLightGroup & signal);
 
 /**
