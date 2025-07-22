@@ -29,14 +29,6 @@
 #include <vector>
 namespace autoware::diffusion_planner
 {
-enum LIGHT_SIGNAL_STATE {
-  GREEN = 0,
-  AMBER = 1,
-  RED = 2,
-  UNKNOWN = 3,
-  NO_TRAFFIC_LIGHT = 4,
-};
-
 // Compute Euclidean distance between two LanePoints
 inline float euclidean_distance(const LanePoint & p1, const LanePoint & p2)
 {
