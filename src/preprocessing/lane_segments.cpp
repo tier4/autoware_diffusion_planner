@@ -301,8 +301,8 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
       traffic_light_vec[TRAFFIC_LIGHT_GREEN - TRAFFIC_LIGHT] = 1.0f;
       break;  // GREEN
     default:
-      traffic_light_vec[TRAFFIC_LIGHT_WHITE - TRAFFIC_LIGHT] = 1.0f;
-      break;  // WHITE/UNKNOWN
+      traffic_light_vec[TRAFFIC_LIGHT_NO_TRAFFIC_LIGHT - TRAFFIC_LIGHT] = 1.0f;
+      break;  // NO_TRAFFIC_LIGHT
   }
 
   // Build each row
