@@ -91,9 +91,6 @@ void add_traffic_light_one_hot_encoding_to_segment(
   const std::shared_ptr<lanelet::LaneletMap> & lanelet_map_ptr, const long row_idx,
   [[maybe_unused]] const long col_counter)
 {
-  if (traffic_light_id_map.empty()) {
-    return;
-  }
   const auto lane_id_itr = col_id_mapping.matrix_col_to_lane_id.find(row_idx);
   if (lane_id_itr == col_id_mapping.matrix_col_to_lane_id.end()) {
     throw std::invalid_argument("Invalid lane row to lane id mapping");
@@ -110,10 +107,11 @@ void add_traffic_light_one_hot_encoding_to_segment(
     const auto & tl_reg_elem = tl_reg_elems.front();
     const auto traffic_light_stamped_info_itr = traffic_light_id_map.find(tl_reg_elem->id());
     if (traffic_light_stamped_info_itr == traffic_light_id_map.end()) {
-      return;
+      traffic_light_one_hot_encoding[TRAFFIC_LIGHT_WHITE - TRAFFIC_LIGHT] = 1.0f;
+    } else {
+      const auto & signal = traffic_light_stamped_info_itr->second.signal;
+      traffic_light_one_hot_encoding = get_traffic_signal_row_vector(signal);
     }
-    const auto & signal = traffic_light_stamped_info_itr->second.signal;
-    traffic_light_one_hot_encoding = get_traffic_signal_row_vector(signal);
   }
   Eigen::MatrixXf one_hot_encoding_matrix =
     traffic_light_one_hot_encoding.replicate(1, POINTS_PER_SEGMENT);
@@ -286,24 +284,7 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
   }
 
   Eigen::MatrixXf segment_data(POINTS_PER_SEGMENT, FULL_MATRIX_ROWS);
-
-  // Encode traffic light as one-hot
-  Eigen::Matrix<float, TRAFFIC_LIGHT_ONE_HOT_DIM, 1> traffic_light_vec =
-    Eigen::Matrix<float, TRAFFIC_LIGHT_ONE_HOT_DIM, 1>::Zero();
-  switch (segment.traffic_light) {
-    case 1:
-      traffic_light_vec[TRAFFIC_LIGHT_RED - TRAFFIC_LIGHT] = 1.0f;
-      break;  // RED
-    case 2:
-      traffic_light_vec[TRAFFIC_LIGHT_YELLOW - TRAFFIC_LIGHT] = 1.0f;
-      break;  // AMBER
-    case 3:
-      traffic_light_vec[TRAFFIC_LIGHT_GREEN - TRAFFIC_LIGHT] = 1.0f;
-      break;  // GREEN
-    default:
-      traffic_light_vec[TRAFFIC_LIGHT_NO_TRAFFIC_LIGHT - TRAFFIC_LIGHT] = 1.0f;
-      break;  // NO_TRAFFIC_LIGHT
-  }
+  segment_data.setZero();
 
   // Build each row
   for (long i = 0; i < POINTS_PER_SEGMENT; ++i) {
@@ -317,8 +298,6 @@ Eigen::MatrixXf process_segment_to_matrix(const LaneSegment & segment)
     segment_data(i, LB_Y) = left_boundaries[i].y();
     segment_data(i, RB_X) = right_boundaries[i].x();
     segment_data(i, RB_Y) = right_boundaries[i].y();
-    segment_data.block<1, TRAFFIC_LIGHT_ONE_HOT_DIM>(i, TRAFFIC_LIGHT) =
-      traffic_light_vec.transpose();
     segment_data(i, SPEED_LIMIT) = segment.speed_limit_mps.value_or(0.0f);
     segment_data(i, LANE_ID) = static_cast<float>(segment.id);
   }

@@ -163,11 +163,9 @@ std::vector<LaneSegment> LaneletConverter::convert_to_lane_segments(
                                                  std::stof(attrs.at("speed_limit").value())))
                                              : std::nullopt;
 
-    // TODO(Daniel): get proper light state, use behavior_velocity_traffic_light module as guide.
-    auto traffic_light = TrafficLightElement::UNKNOWN;
     lane_segments.emplace_back(
       lanelet.id(), lane_polyline, is_intersection, left_boundary_segments, right_boundary_segments,
-      speed_limit_mps, traffic_light);
+      speed_limit_mps);
   }
   return lane_segments;
 }
