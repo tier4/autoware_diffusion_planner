@@ -505,13 +505,7 @@ InputDataMap DiffusionPlanner::create_input_data()
 
   // ego shape
   {
-    const float wheel_base = static_cast<float>(vehicle_info_.wheel_base_m);
-    const float vehicle_length = static_cast<float>(
-      vehicle_info_.front_overhang_m + vehicle_info_.wheel_base_m + vehicle_info_.rear_overhang_m);
-    const float vehicle_width = static_cast<float>(
-      vehicle_info_.left_overhang_m + vehicle_info_.wheel_tread_m + vehicle_info_.right_overhang_m);
-
-    input_data_map["ego_shape"] = std::vector<float>{wheel_base, vehicle_length, vehicle_width};
+    input_data_map["ego_shape"] = std::vector<float>{2.790000, 4.340000, 1.700000};
   }
 
   return input_data_map;
@@ -573,6 +567,91 @@ std::vector<float> DiffusionPlanner::do_inference_trt(InputDataMap & input_data_
   auto route_lanes_speed_limit = input_data_map["route_lanes_speed_limit"];
   auto goal_pose = input_data_map["goal_pose"];
   auto ego_shape = input_data_map["ego_shape"];
+
+  // // save text for debugging
+  // {
+  //   // ego history
+  //   std::ofstream ego_history_file("input_ego_history.txt");
+  //   ego_history_file << std::fixed;
+  //   for (const auto & value : ego_history) {
+  //     ego_history_file << value << std::endl;
+  //   }
+  //   ego_history_file.close();
+
+  //   // ego current state
+  //   std::ofstream ego_current_state_file("input_ego_current_state.txt");
+  //   ego_current_state_file << std::fixed;
+  //   for (const auto & value : ego_current_state) {
+  //     ego_current_state_file << value << std::endl;
+  //   }
+  //   ego_current_state_file.close();
+
+  //   // neighbor agents past
+  //   std::ofstream neighbor_agents_past_file("input_neighbor_agents_past.txt");
+  //   neighbor_agents_past_file << std::fixed;
+  //   for (const auto & value : neighbor_agents_past) {
+  //     neighbor_agents_past_file << value << std::endl;
+  //   }
+  //   neighbor_agents_past_file.close();
+
+  //   // static objects
+  //   std::ofstream static_objects_file("input_static_objects.txt");
+  //   static_objects_file << std::fixed;
+  //   for (const auto & value : static_objects) {
+  //     static_objects_file << value << std::endl;
+  //   }
+  //   static_objects_file.close();
+
+  //   // lanes
+  //   std::ofstream lanes_file("input_lanes.txt");
+  //   lanes_file << std::fixed;
+  //   for (const auto & value : lanes) {
+  //     lanes_file << value << std::endl;
+  //   }
+  //   lanes_file.close();
+
+  //   // lanes speed limit
+  //   std::ofstream lanes_speed_limit_file("input_lanes_speed_limit.txt");
+  //   lanes_speed_limit_file << std::fixed;
+  //   for (const auto & value : lanes_speed_limit) {
+  //     lanes_speed_limit_file << value << std::endl;
+  //   }
+  //   lanes_speed_limit_file.close();
+
+  //   // route lanes
+  //   std::ofstream route_lanes_file("input_route_lanes.txt");
+  //   route_lanes_file << std::fixed;
+  //   for (const auto & value : route_lanes) {
+  //     route_lanes_file << value << std::endl;
+  //   }
+  //   route_lanes_file.close();
+
+  //   // route lanes speed limit
+  //   std::ofstream route_lanes_speed_limit_file("input_route_lanes_speed_limit.txt");
+  //   route_lanes_speed_limit_file << std::fixed;
+  //   for (const auto & value : route_lanes_speed_limit) {
+  //     route_lanes_speed_limit_file << value << std::endl;
+  //   }
+  //   route_lanes_speed_limit_file.close();
+
+  //   // goal pose
+  //   std::ofstream goal_pose_file("input_goal_pose.txt");
+  //   goal_pose_file << std::fixed;
+  //   for (const auto & value : goal_pose) {
+  //     goal_pose_file << value << std::endl;
+  //   }
+  //   goal_pose_file.close();
+
+  //   // ego shape
+  //   std::ofstream ego_shape_file("input_ego_shape.txt");
+  //   ego_shape_file << std::fixed;
+  //   for (const auto & value : ego_shape) {
+  //     ego_shape_file << value << std::endl;
+  //   }
+  //   ego_shape_file.close();
+
+  //   std::exit(0);
+  // }
 
   // Allocate bool array for lane speed limits
   // Note: Using std::vector<uint8_t> instead of std::vector<bool> to ensure contiguous memory
