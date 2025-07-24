@@ -317,10 +317,11 @@ std::vector<float> extract_lane_tensor_data(const Eigen::MatrixXf & lane_segment
 std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_segments_matrix)
 {
   const auto total_lane_points = LANES_SPEED_LIMIT_SHAPE[1];
-  Eigen::MatrixXf lane_speed_matrix(LANES_SPEED_LIMIT_SHAPE[2], total_lane_points);
-  lane_speed_matrix.block(0, 0, LANES_SPEED_LIMIT_SHAPE[2], total_lane_points) =
-    lane_segments_matrix.block(SPEED_LIMIT, 0, LANES_SPEED_LIMIT_SHAPE[2], total_lane_points);
-  return {lane_speed_matrix.data(), lane_speed_matrix.data() + lane_speed_matrix.size()};
+  std::vector<float> lane_speed_vector(total_lane_points);
+  for (long i = 0; i < total_lane_points; ++i) {
+    lane_speed_vector[i] = lane_segments_matrix(SPEED_LIMIT, i * POINTS_PER_SEGMENT);
+  }
+  return lane_speed_vector;
 }
 
 std::vector<float> get_route_segments(
