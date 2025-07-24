@@ -324,7 +324,7 @@ std::vector<float> extract_lane_speed_tensor_data(const Eigen::MatrixXf & lane_s
   return lane_speed_vector;
 }
 
-std::vector<float> get_route_segments(
+std::pair<std::vector<float>, std::vector<float>> get_route_segments(
   const Eigen::MatrixXf & map_lane_segments_matrix, const Eigen::Matrix4f & transform_matrix,
   const ColLaneIDMaps & col_id_mapping,
   const std::map<lanelet::Id, TrafficSignalStamped> & traffic_light_id_map,
@@ -335,6 +335,8 @@ std::vector<float> get_route_segments(
   Eigen::MatrixXf full_route_segment_matrix(SEGMENT_POINT_DIM, total_route_points);
   full_route_segment_matrix.setZero();
   long added_route_segments = 0;
+
+  std::vector<float> speed_limit_vector(ROUTE_LANES_SHAPE[1]);
 
   // Add traffic light one-hot encoding to the route segments
   for (const auto & route_segment : current_lanes) {
@@ -354,13 +356,16 @@ std::vector<float> get_route_segments(
     add_traffic_light_one_hot_encoding_to_segment(
       full_route_segment_matrix, col_id_mapping, traffic_light_id_map, lanelet_map_ptr, row_idx,
       added_route_segments);
+
+    speed_limit_vector[added_route_segments] = map_lane_segments_matrix(SPEED_LIMIT, row_idx);
     ++added_route_segments;
   }
   // Transform the route segments.
   apply_transforms(transform_matrix, full_route_segment_matrix, added_route_segments);
   return {
-    full_route_segment_matrix.data(),
-    full_route_segment_matrix.data() + full_route_segment_matrix.size()};
+    {full_route_segment_matrix.data(),
+     full_route_segment_matrix.data() + full_route_segment_matrix.size()},
+    speed_limit_vector};
 }
 
 }  // namespace autoware::diffusion_planner::preprocess

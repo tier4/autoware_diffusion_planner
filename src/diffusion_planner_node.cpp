@@ -475,9 +475,11 @@ InputDataMap DiffusionPlanner::create_input_data()
     auto current_lanes = route_handler_->getLaneletSequence(
       current_preferred_lane, backward_path_length, forward_path_length);
 
-    input_data_map["route_lanes"] = preprocess::get_route_segments(
+    const auto [route_lanes, route_lanes_speed_limit] = preprocess::get_route_segments(
       map_lane_segments_matrix_, map_to_ego_transform, col_id_mapping_, traffic_light_id_map_,
       lanelet_map_ptr_, current_lanes);
+    input_data_map["route_lanes"] = route_lanes;
+    input_data_map["route_lanes_speed_limit"] = route_lanes_speed_limit;
   }
 
   // goal pose
@@ -510,15 +512,6 @@ InputDataMap DiffusionPlanner::create_input_data()
       vehicle_info_.left_overhang_m + vehicle_info_.wheel_tread_m + vehicle_info_.right_overhang_m);
 
     input_data_map["ego_shape"] = std::vector<float>{wheel_base, vehicle_length, vehicle_width};
-  }
-
-  // route_lanes_speed_limit
-  {
-    const size_t route_lanes_speed_limit_size = std::accumulate(
-      ROUTE_LANES_SPEED_LIMIT_SHAPE.begin(), ROUTE_LANES_SPEED_LIMIT_SHAPE.end(), 1,
-      std::multiplies<>());
-    input_data_map["route_lanes_speed_limit"] =
-      std::vector<float>(route_lanes_speed_limit_size, 0.0f);
   }
 
   return input_data_map;
